@@ -20,7 +20,7 @@ import type { TokenKey } from "@/theme/tokens";
 
 const SQL = [
   "SELECT d.id, d.amount, d.created_at",
-  "FROM clients_deposits_clientdeposit d",
+  "FROM payments d",
   "WHERE d.status = 'PENDING'",
   "  -- pendientes del día",
   "ORDER BY d.created_at DESC",

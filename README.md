@@ -10,33 +10,143 @@ rejilla de resultados rápida, diagramas ER y un asistente de IA para tareas SQL
 
 ![Consola SQL con resultados](docs/screenshots/01-consola.png)
 
+## Contenido
+
+- [Características](#características)
+  - [Conexiones y motores](#conexiones-y-motores)
+  - [Consola SQL](#consola-sql)
+  - [Resultados y edición de datos](#resultados-y-edición-de-datos)
+  - [Explorador, diagramas y DDL](#explorador-diagramas-y-ddl)
+  - [MongoDB](#mongodb)
+  - [Asistente de IA](#asistente-de-ia)
+  - [Productividad](#productividad)
+- [Personalización](#personalización)
+- [Instalación](#instalación)
+- [Desarrollo](#desarrollo)
+- [Contribuir](#contribuir)
+
 ## Características
 
-- **Motores**: PostgreSQL, MySQL / MariaDB, SQL Server y MongoDB.
-- **Conexiones seguras**: contraseñas cifradas con el Llavero de macOS, TLS configurable, túnel SSH y
-  modo *solo lectura* que bloquea INSERT/UPDATE/DELETE/DDL.
-- **Consola SQL**: varias consolas por conexión, ejecutar la sentencia actual o todo el script,
-  `EXPLAIN`, formateo, transacciones automáticas o manuales (commit / rollback), historial y log de SQL.
-- **Autocompletado por contexto**: después de `FROM` sugiere tablas, y en un `JOIN … ON` propone la
-  condición correcta a partir de las claves foráneas.
-- **Rejilla de resultados**: miles de filas sin trabarse, filtros por columna, ordenamiento, columnas
-  redimensionables que se recuerdan, edición de celdas y exportación a CSV, JSON, Markdown o SQL.
-- **Vista de tabla y diagramas ER**: abre cualquier tabla con un clic, explora sus relaciones en un
-  diagrama interactivo y expórtalo a PNG.
-- **Consultas guardadas y favoritos** por conexión, más paleta de comandos (`⌘K`).
-- **MongoDB**: colecciones con filtros, vista de documentos y edición.
-- **31 temas** (Darcula, One Dark, Nord, Tokyo Night, GitHub, Catppuccin, Solarized…), con modo claro,
-  oscuro o seguir al sistema.
-- **Asistente de IA** (OpenRouter, opcional): texto a SQL, corregir errores, explicar, convertir entre
-  dialectos y optimizar. El SQL generado **nunca** se ejecuta sin que tú lo confirmes.
+### Conexiones y motores
 
-| Autocompletado con JOIN por clave foránea | Diagrama ER |
+- **PostgreSQL, MySQL / MariaDB, SQL Server y MongoDB** en la misma app, con varias conexiones abiertas a la vez.
+- **Contraseñas cifradas** con el Llavero de macOS (`safeStorage`); el archivo de conexiones nunca las guarda.
+- **TLS** configurable, **túnel SSH** (contraseña o llave) y **modo solo lectura** por conexión, que bloquea
+  INSERT/UPDATE/DELETE/DDL.
+- **Color por conexión** que tiñe el explorador y las pestañas, para distinguir producción de desarrollo de un vistazo.
+- Cada consola tiene **su propia conexión y base de datos**; si la sesión caduca, se reconecta con un clic desde
+  cualquier vista.
+
+![Conexiones](docs/screenshots/05-conexiones.png)
+
+### Consola SQL
+
+- Editor propio con números de línea, resaltado de sintaxis y **contorno de la sentencia actual**.
+- **Autocompletado por contexto**: después de `FROM` sugiere tablas, después de un alias sus columnas, y en un
+  `JOIN … ON` propone la condición correcta a partir de las **claves foráneas**.
+- **Ejecutar la sentencia actual** (`⌘↵`) o **todo el script** (`⌘⇧↵`): cada sentencia abre su propia pestaña de
+  resultados.
+- **Plan de ejecución visual** (`⌘⇧J`): árbol de nodos con costo y filas estimadas, marca los nodos costosos y
+  ofrece **«Optimizar con IA»**.
+- **Formatear SQL** (`⌘⇧F`), **transacciones** automáticas o manuales con commit / rollback, y cancelar consultas
+  en curso.
+- **Historial** de todo lo ejecutado (con duración y filas) y **log de SQL**.
+- **Consultas guardadas** por conexión, con buscador; la pestaña toma el nombre de la consulta.
+
+| Autocompletado con JOIN por clave foránea | Plan de ejecución |
 | --- | --- |
-| ![Autocompletado](docs/screenshots/02-autocompletado.png) | ![Diagrama ER](docs/screenshots/03-diagrama-er.png) |
-| **Vista de tabla** | **Conexiones** |
-| ![Vista de tabla](docs/screenshots/04-tabla.png) | ![Conexiones](docs/screenshots/05-conexiones.png) |
-| **Apariencia y temas** | **Tema claro** |
-| ![Apariencia](docs/screenshots/06-apariencia.png) | ![Tema claro](docs/screenshots/07-tema-claro.png) |
+| ![Autocompletado](docs/screenshots/02-autocompletado.png) | ![EXPLAIN](docs/screenshots/08-explain.png) |
+| **Historial y varias pestañas de resultados** | **Consultas guardadas** |
+| ![Historial](docs/screenshots/09-historial-y-resultados.png) | ![Guardadas](docs/screenshots/10-consultas-guardadas.png) |
+
+### Resultados y edición de datos
+
+- Rejilla rápida (canvas) que maneja **miles de filas** sin trabarse.
+- **Filtros por columna**, ordenamiento, columnas redimensionables que se recuerdan por tabla y **colores por tipo
+  de dato**.
+- **Editar celdas en línea**, agregar, duplicar y borrar filas: los cambios quedan **pendientes** hasta que pulsas
+  *Guardar* (o *Descartar*).
+- **Panel «Valor»** para ver y editar valores largos (texto, JSON) de la celda seleccionada.
+- **Topes rápidos de filas** (`LIMIT`), copiar la selección como TSV u otros formatos, y **exportar** a CSV, JSON,
+  Markdown o `INSERT` SQL con vista previa.
+
+| Vista de tabla | Edición con cambios pendientes y panel de valor |
+| --- | --- |
+| ![Vista de tabla](docs/screenshots/04-tabla.png) | ![Edición](docs/screenshots/16-edicion-de-datos.png) |
+
+### Explorador, diagramas y DDL
+
+- **Explorador de esquema** con esquemas, tablas y **favoritos** (filtro «solo favoritos»).
+- **Diagramas ER interactivos**: parte de una tabla, agrega las relacionadas con un clic, reorganiza y
+  **exporta a PNG**.
+- **Editor visual de tablas**: define columnas, tipos, PK, nulos y defaults; el `CREATE TABLE` se genera en vivo.
+  También plantillas para **vistas, índices, triggers y funciones**, y *Copiar DDL* de cualquier tabla.
+
+| Diagrama ER | Nueva tabla (editor visual) |
+| --- | --- |
+| ![Diagrama ER](docs/screenshots/03-diagrama-er.png) | ![Nueva tabla](docs/screenshots/17-nueva-tabla.png) |
+
+### MongoDB
+
+- Explorador de colecciones y vista de documentos en **lista o JSON**, con paginación.
+- **Filtros** con sintaxis de Mongo (`{ calificacion: { $gte: 4 } }`) y sugerencias de campos.
+- Crear, editar y borrar documentos.
+
+![MongoDB](docs/screenshots/15-mongodb.png)
+
+### Asistente de IA
+
+Opcional, con tu propia clave de [OpenRouter](https://openrouter.ai) y el modelo que elijas.
+
+- **Texto a SQL** (`⌘⇧Y`) usando tu esquema como contexto.
+- **Chat** que conoce las tablas de la conexión activa, con acciones rápidas: **explicar, convertir entre dialectos
+  y optimizar**.
+- **Corregir errores** desde el banner de error de una consulta.
+- **Datos con IA**: resumir filas de un resultado (pide confirmación antes de mandar datos) o generar SQL de
+  agregación.
+- El SQL generado **nunca se ejecuta sin que tú lo confirmes**.
+
+| Chat con contexto del esquema | Generar SQL |
+| --- | --- |
+| ![IA chat](docs/screenshots/13-ia-chat.png) | ![Generar SQL](docs/screenshots/14-ia-generar-sql.png) |
+
+### Productividad
+
+- **Paleta de comandos** (`⌘K`): acciones, funciones de IA y salto directo a cualquier tabla.
+- **41 atajos compatibles con DataGrip** (ejecutar, nueva consola, plan, formatear, diagrama, historial…) y un
+  diálogo que los lista todos.
+- **Ventanas de herramientas** (Explorador, Guardadas, IA, Resultados, Historial, Valor) que se muestran u ocultan
+  como en los IDE de JetBrains.
+- Menú nativo de macOS y la app recuerda pestañas, tamaño de ventana y layout entre sesiones.
+
+| Paleta de comandos | Atajos de teclado |
+| --- | --- |
+| ![Paleta](docs/screenshots/11-paleta-de-comandos.png) | ![Atajos](docs/screenshots/12-atajos.png) |
+
+## Personalización
+
+Todo desde **Apariencia** (botón de la barra superior o menú *View*), con **vista previa en vivo**: los cambios se
+aplican al instante.
+
+- **Tema**: 31 temas (22 oscuros y 9 claros: Darcula, Islands Dark, One Dark, Monokai, Nord, Tokyo Night, Dracula,
+  Catppuccin, Gruvbox, Rosé Pine, Everforest, Kanagawa, Ayu, Material, Night Owl, Solarized, GitHub, alto
+  contraste…), buscador de temas y **modo claro, oscuro o seguir al sistema**.
+- **Colores**: **tinte de conexión** con intensidad ajustable, para que cada entorno se vea distinto.
+- **Rejilla de datos**: cuadrícula **marcada, suave o sin líneas** y colores por tipo de dato.
+- **Ventana**: densidad **New UI** (24/40 px) o **Clásica** (20/32 px), barra de ventanas de herramientas
+  **vertical o en el header**, y restablecer el layout.
+- **Avanzado**: elige el tema base y **edita cada color** por grupos (chrome, interacción, pestañas, rejilla,
+  editor y sintaxis SQL). Puedes **importar y exportar** tu tema y restablecerlo cuando quieras.
+
+| Temas | Tinte de conexión |
+| --- | --- |
+| ![Temas](docs/screenshots/06-apariencia.png) | ![Colores](docs/screenshots/20-personalizacion-colores.png) |
+| **Rejilla de datos** | **Ventana y densidad** |
+| ![Rejilla](docs/screenshots/21-personalizacion-rejilla.png) | ![Ventana](docs/screenshots/22-personalizacion-ventana.png) |
+| **Avanzado: cada color editable** | **Tokyo Night** |
+| ![Avanzado](docs/screenshots/23-personalizacion-avanzado.png) | ![Tokyo Night](docs/screenshots/18-tema-tokyo-night.png) |
+| **Tema claro** | |
+| ![Tema claro](docs/screenshots/07-tema-claro.png) | |
 
 ## Instalación
 
