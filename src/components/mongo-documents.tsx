@@ -1,0 +1,991 @@
+/**
+ * Vista de documentos de una colección de MongoDB (fase 81) — la versión DataDB de la vista
+ * «Documents» de MongoDB Compass, que es la referencia que dio el usuario.
+ *
+ * QUÉ REPLICA DE COMPASS (y por qué):
+ *  - **Barra de consulta** arriba con el filtro en JSON, «Buscar» a la derecha y «Limpiar»: es el
+ *    gesto central de Compass, escribir `{ campo: "valor" }` y ver el resultado sin salir de la
+ *    colección.
+ *  - **Opciones** plegadas (proyección y orden) para no llenar la barra: en Compass viven detrás de
+ *    «Options». Aquí son dos campos que se olvidan al cerrarse, como allí.
+ *  - **Tarjeta por documento** con una fila por campo (`clave: valor`), el tipo con color y los
+ *    objetos/arrays plegables con su resumen (`{3 campos}`, `[4]`). Una rejilla de columnas no sirve:
+ *    los documentos de una colección NO comparten campos.
+ *  - **Contador y paginación** a la derecha (`1–25 de 120`), con el tamaño de página en un selector.
+ *  - **Vista JSON** conmutables: la tarjeta para leer, el JSON para copiar.
+ *
+ * QUÉ NO HACE TODAVÍA (fase siguiente, declarado en el PLAN): editar/insertar/borrar documentos,
+ * índices, aggregations y explicar el plan.
+ */
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+import { IjIcon } from "@/components/ij-icon";
+import { cn } from "@/lib/utils";
+import { mongoDelete, mongoFields, mongoFind, mongoInsert, mongoUpdate } from "@/lib/api";
+import { MongoBorrarDialog, MongoDocumentDialog, type ModoDeDocumento } from "@/components/mongo-document-dialog";
+import { plantillaParaDuplicar, plantillaParaEditar } from "@/shared/mongo-document-json";
+import {
+  cambiosRespectoA,
+  convertirTexto,
+  esEditable,
+  textoEditable,
+  type TipoValorOriginal,
+} from "@/shared/mongo-values";
+import { MongoQueryField } from "@/components/mongo-query-field";
+import { SUGERENCIAS_MONGO } from "@/lib/mongo-snippets";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { Session } from "@/lib/types";
+import { cacheDeVistasMongo } from "@/lib/mongo-vista";
+import {
+  esHoja,
+  tipoDeValor,
+  textoDeValor,
+  type MongoFindResult,
+  type TipoDeValor,
+} from "@/shared/mongo-view";
+
+/** Color por tipo, con los tokens de sintaxis del tema (no colores literales). */
+const CLASE_TIPO: Record<TipoDeValor, string> = {
+  string: "text-gdb-str",
+  number: "text-gdb-num",
+  boolean: "text-gdb-kw",
+  null: "text-gdb-fgmuted",
+  objectid: "text-gdb-const",
+  date: "text-gdb-const",
+  decimal: "text-gdb-num",
+  long: "text-gdb-num",
+  binary: "text-gdb-fgmuted",
+  regex: "text-gdb-str",
+  object: "text-gdb-fg",
+  array: "text-gdb-fg",
+};
+
+const TAMANOS_DE_PAGINA = [25, 50, 100];
+
+/**
+ * Una fila `clave: valor`. Se pliega si el valor es objeto o array y, en el primer nivel, se puede
+ * EDITAR en el sitio (fase 85): clic en el valor → input, `⏎` lo manda al borrador, `⎋` lo descarta.
+ *
+ * La fila editada se marca con una barra a la izquierda y el valor anterior al pasar el ratón: es la
+ * forma de «mostrar visualmente qué cambió» sin abrir un diff aparte.
+ */
+function FilaDeCampo({
+  nombre,
+  valor,
+  profundidad,
+  editable = false,
+  cambiado = false,
+  valorServidor,
+  onCambio,
+}: {
+  nombre: string;
+  valor: unknown;
+  profundidad: number;
+  editable?: boolean;
+  cambiado?: boolean;
+  /** Valor que tiene el documento en el servidor, para el «antes: …». */
+  valorServidor?: unknown;
+  onCambio?: (valor: unknown) => void;
+}) {
+  const [abierto, setAbierto] = React.useState(profundidad < 1);
+  const [editando, setEditando] = React.useState(false);
+  const [texto, setTexto] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const tipo = tipoDeValor(valor);
+  const desplegable = !esHoja(tipo);
+  const puedeEditar = editable && !desplegable && esEditable(tipo);
+  const hijos: [string, unknown][] = Array.isArray(valor)
+    ? valor.map((v, i) => [String(i), v] as [string, unknown])
+    : desplegable
+      ? Object.entries(valor as Record<string, unknown>)
+      : [];
+
+  function empezar() {
+    if (!puedeEditar) return;
+    setTexto(textoEditable(valor));
+    setError(null);
+    setEditando(true);
+  }
+
+  function confirmar() {
+    const r = convertirTexto(texto, tipo as TipoValorOriginal);
+    if (!r.ok) {
+      // No se acepta y NO se toca el borrador: el valor sigue como estaba.
+      setError(r.error);
+      return;
+    }
+    onCambio?.(r.valor);
+    setEditando(false);
+    setError(null);
+  }
+
+  return (
+    <div className="select-text">
+      <div
+        className={cn(
+          "group flex items-baseline gap-1 rounded px-1 py-[1px]",
+          desplegable && "cursor-pointer hover:bg-gdb-rowhover",
+          puedeEditar && !editando && "cursor-text hover:bg-gdb-rowhover",
+          cambiado && "border-l-2 border-gdb-accent bg-gdb-hover"
+        )}
+        onClick={desplegable ? () => setAbierto((a) => !a) : puedeEditar && !editando ? empezar : undefined}
+        title={cambiado ? `Antes: ${textoDeValor(valorServidor)}` : undefined}
+        style={{ paddingLeft: 4 + profundidad * 14 }}
+      >
+        {desplegable ? (
+          <span className="flex w-3 shrink-0 justify-center text-[9px] text-gdb-fgmuted">
+            {abierto ? "▾" : "▸"}
+          </span>
+        ) : (
+          <span className="w-3 shrink-0" />
+        )}
+        <span className="shrink-0 font-jetbrains text-[11px] text-gdb-fgstrong">{nombre}</span>
+        <span className="shrink-0 text-[11px] text-gdb-fgmuted">:</span>
+
+        {editando ? (
+          <span className="flex min-w-0 flex-1 items-baseline gap-1">
+            <input
+              autoFocus
+              value={texto}
+              onChange={(e) => {
+                setTexto(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  confirmar();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditando(false);
+                  setError(null);
+                }
+              }}
+              onBlur={() => {
+                // Perder el foco sin ⏎ descarta: un clic fuera no debe guardar algo a medias.
+                setEditando(false);
+                setError(null);
+              }}
+              aria-label={`Editar ${nombre}`}
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded border border-gdb-accent bg-gdb-field px-1 font-jetbrains text-[11px] text-gdb-fg outline-none"
+            />
+            {error && <span className="shrink-0 text-[10px] text-gdb-dangerfg">{error}</span>}
+            {tipo === "null" && (
+              <span className="shrink-0 text-[10px] text-gdb-fgmuted">escribe un texto y quedará como cadena</span>
+            )}
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 break-all font-jetbrains text-[11px]",
+              CLASE_TIPO[tipo],
+              tipo === "null" && "italic"
+            )}
+          >
+            {textoDeValor(valor)}
+          </span>
+        )}
+      </div>
+      {desplegable && abierto && (
+        <div>
+          {hijos.map(([k, v]) => (
+            // Los anidados se ven pero no se editan en la v1 (fase 85 §2): su editor es el de la v2.
+            <FilaDeCampo key={k} nombre={k} valor={v} profundidad={profundidad + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TarjetaDeDocumento({
+  doc,
+  original,
+  indice,
+  vista,
+  editable,
+  guardando,
+  error,
+  onCambio,
+  onRevertir,
+  onGuardar,
+  onEditarJson,
+  onDuplicar,
+  onBorrar,
+}: {
+  /** Documento con el borrador ya aplicado. */
+  doc: Record<string, unknown>;
+  /** Documento tal como está en el servidor (para el diff y el «antes»). */
+  original: Record<string, unknown>;
+  indice: number;
+  vista: "lista" | "json";
+  editable: boolean;
+  guardando: boolean;
+  error: string | null;
+  onCambio: (campo: string, valor: unknown) => void;
+  onRevertir: () => void;
+  onGuardar: () => void;
+  onEditarJson: () => void;
+  onDuplicar: () => void;
+  onBorrar: () => void;
+}) {
+  const [copiado, setCopiado] = React.useState(false);
+  const cambios = cambiosRespectoA(original, doc);
+  const nCambios = Object.keys(cambios).length;
+
+  return (
+    <div className="group rounded-md border border-gdb-border bg-editor">
+      {/*
+        Cabecera: chip con el número, la cuenta de cambios y —solo cuando hay cambios— Revertir y
+        Guardar. Decisión del usuario (2026-10-21): los botones viven aquí, junto al número.
+      */}
+      <div className="flex items-center justify-between gap-2 border-b border-gdb-border/60 bg-gdb-chrome/30 px-2 py-[3px]">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="rounded border border-gdb-border/70 bg-gdb-chrome px-1.5 py-[1px] font-jetbrains text-[10px] font-medium tabular-nums text-gdb-fgstrong"
+            title={`Documento ${indice} de esta página`}
+          >
+            #{indice}
+          </span>
+          {nCambios > 0 && (
+            <span className="shrink-0 text-[10px] text-gdb-accent" title="Campos modificados sin guardar">
+              ● {nCambios} {nCambios === 1 ? "cambio" : "cambios"}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {nCambios > 0 && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onRevertir}
+                disabled={guardando}
+                title="Descartar los cambios de este documento"
+                className="h-6 px-2 text-[11px]"
+              >
+                Revertir
+              </Button>
+              <Button
+                size="sm"
+                onClick={onGuardar}
+                disabled={guardando}
+                title="Guardar los cambios en la base"
+                className="h-6 px-2 text-[11px]"
+              >
+                {guardando ? "Guardando…" : "Guardar"}
+              </Button>
+            </>
+          )}
+          {editable && (
+            <>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={onEditarJson}
+                title="Editar el documento como JSON (incluye anidados)"
+                aria-label="Editar el documento como JSON"
+                className="h-5 w-5 text-[10px] text-gdb-fgmuted hover:text-gdb-fg"
+              >
+                {"{}"}
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={onDuplicar}
+                title="Duplicar este documento"
+                aria-label="Duplicar este documento"
+                className="h-5 w-5 text-[11px] text-gdb-fgmuted hover:text-gdb-fg"
+              >
+                ⧉
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={onBorrar}
+                title="Borrar este documento"
+                aria-label="Borrar este documento"
+                className="h-5 w-5 text-[11px] text-gdb-fgmuted hover:text-gdb-dangerfg"
+              >
+                ✕
+              </Button>
+            </>
+          )}
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            title="Copiar el documento como JSON"
+            aria-label="Copiar el documento como JSON"
+            className="h-5 w-5 opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={async () => {
+              await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+              setCopiado(true);
+              setTimeout(() => setCopiado(false), 1200);
+            }}
+          >
+            <span className="text-[10px]">{copiado ? "✓" : "⧉"}</span>
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <p role="alert" className="mx-2 mt-1 rounded border border-gdb-dangerbg bg-gdb-dangerbg px-2 py-1 text-[10px] text-gdb-dangerfg">
+          {error}
+        </p>
+      )}
+
+      {vista === "json" ? (
+        <pre className="max-h-80 overflow-auto p-2 font-jetbrains text-[11px] leading-[1.45] text-gdb-fg">
+          {JSON.stringify(doc, null, 2)}
+        </pre>
+      ) : (
+        <div className="py-1">
+          {Object.entries(doc).map(([k, v]) => (
+            <FilaDeCampo
+              key={k}
+              nombre={k}
+              valor={v}
+              profundidad={0}
+              editable={editable && vista === "lista"}
+              cambiado={Object.prototype.hasOwnProperty.call(cambios, k)}
+              valorServidor={original[k]}
+              onCambio={(valor) => onCambio(k, valor)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function MongoDocuments({
+  session,
+  coleccion,
+  pestanaId,
+}: {
+  session: Session;
+  coleccion: string;
+  /** Id de la pestaña: la clave del caché de vistas (T1 de R100). */
+  pestanaId: string;
+}) {
+  /**
+   * Estado con el que nace la vista: lo que esta pestaña tenía la última vez (T1 de R100). Se lee con
+   * el inicializador de `useState` —no en un efecto— para que corra exactamente una vez por montaje:
+   * un `useEffect` llegaría DESPUÉS del primer render y la primera página se pediría igual.
+   */
+  const [vistaInicial] = React.useState(() => cacheDeVistasMongo.leer(pestanaId));
+  const [filtro, setFiltro] = React.useState(vistaInicial?.filtro ?? "");
+  const [proyeccion, setProyeccion] = React.useState(vistaInicial?.proyeccion ?? "");
+  const [orden, setOrden] = React.useState(vistaInicial?.orden ?? "");
+  const [opcionesAbiertas, setOpcionesAbiertas] = React.useState(vistaInicial?.opcionesAbiertas ?? false);
+  const [pagina, setPagina] = React.useState(vistaInicial?.pagina ?? 0);
+  const [porPagina, setPorPagina] = React.useState(vistaInicial?.porPagina ?? TAMANOS_DE_PAGINA[0]);
+  const [vista, setVista] = React.useState<"lista" | "json">(vistaInicial?.vista ?? "lista");
+  const [resultado, setResultado] = React.useState<MongoFindResult | null>(vistaInicial?.resultado ?? null);
+  /**
+   * Borradores por documento (fase 85): `clave` → valores editados. No tocan el servidor hasta
+   * Guardar. La clave es el `_id` serializado, que es lo único estable de un documento.
+   */
+  const [borradores, setBorradores] = React.useState<Record<string, Record<string, unknown>>>(
+    vistaInicial?.borradores ?? {}
+  );
+  const [guardando, setGuardando] = React.useState<Record<string, boolean>>({});
+  const [erroresDoc, setErroresDoc] = React.useState<Record<string, string | null>>(
+    vistaInicial?.erroresDoc ?? {}
+  );
+  /**
+   * Diálogo de documento (fase 86): insertar, duplicar o editar el JSON completo (incluye anidados).
+   * `documento` es el original cuando se edita o duplica; en «insertar» va vacío.
+   */
+  const [dialogo, setDialogo] = React.useState<
+    { modo: ModoDeDocumento; texto: string; original?: Record<string, unknown> } | null
+  >(null);
+  const [dialogoGuardando, setDialogoGuardando] = React.useState(false);
+  const [dialogoError, setDialogoError] = React.useState<string | null>(null);
+  /** Confirmación de borrado: el documento que se va a borrar. */
+  const [porBorrar, setPorBorrar] = React.useState<Record<string, unknown> | null>(null);
+  const [borrando, setBorrando] = React.useState(false);
+  const [borrarError, setBorrarError] = React.useState<string | null>(null);
+  const [cargando, setCargando] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  /**
+   * `aplicado` es el filtro que se está MOSTRANDO, separado de lo que hay escrito en la barra.
+   * Sin esa separación, teclear dispara una consulta por tecla o el contador miente: Compass hace
+   * lo mismo — se escribe y se pulsa Buscar (o ⌘⏎).
+   */
+  const [aplicado, setAplicado] = React.useState(
+    vistaInicial?.aplicado ?? { filtro: "", proyeccion: "", orden: "" }
+  );
+  /**
+   * Campos de la colección para el autocompletado (fase 83). Se piden al abrir la colección: son los
+   * que Mongo sí detecta, y sin ellos el usuario teclea los nombres a ciegas.
+   */
+  const [campos, setCampos] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const { campos: lista } = await mongoFields({ sessionId: session.sessionId, coleccion });
+        if (vivo) setCampos(lista);
+      } catch {
+        // Sin campos el autocompletado de claves queda vacío; los operadores siguen funcionando.
+        // No se muestra error: es una ayuda, no parte de la consulta.
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [session.sessionId, coleccion]);
+
+  const cargar = React.useCallback(
+    async (opts: { filtro: string; proyeccion: string; orden: string }, paginaNueva: number, tamano: number) => {
+      setCargando(true);
+      setError(null);
+      try {
+        const r = await mongoFind({
+          sessionId: session.sessionId,
+          coleccion,
+          filtro: opts.filtro,
+          proyeccion: opts.proyeccion,
+          orden: opts.orden,
+          skip: paginaNueva * tamano,
+          limit: tamano,
+        });
+        setResultado(r);
+      } catch (err) {
+        // El IPC devuelve el error serializado y a veces llega con el prefijo «Error: »: se quita
+        // para que el aviso empiece por el motivo («filtro inválido: …») y no por la palabra.
+        const mensaje = err instanceof Error ? err.message : String(err);
+        setError(mensaje.replace(/^Error:\s*/, ""));
+        setResultado(null);
+      } finally {
+        setCargando(false);
+      }
+    },
+    [session.sessionId, coleccion]
+  );
+
+  const buscar = React.useCallback(() => {
+    const siguiente = { filtro, proyeccion, orden };
+    setAplicado(siguiente);
+    setPagina(0);
+    void cargar(siguiente, 0, porPagina);
+  }, [filtro, proyeccion, orden, porPagina, cargar]);
+
+  /*
+   * Primera página, sin filtro (como Compass) — PERO sólo la primera vez de esta pestaña. Al cambiar
+   * de colección el componente se desmonta (`key={tab.id}`) y al volver NACE con lo que el caché
+   * guardó de la última visita: si ya hay resultado, repetir la consulta tiraría a la basura justo
+   * lo que el usuario pidió conservar. Sólo una pestaña sin historial (caché vacío) pide la página
+   * inicial. Un `setState` síncrono dentro de un efecto está prohibido por el lint del repo (renders
+   * en cascada).
+   */
+  React.useEffect(() => {
+    let vivo = true;
+    // El `await` antes de la llamada es deliberado: el lint del repo (react-hooks/set-state-in-effect)
+    // prohíbe tocar estado DENTRO del efecto de forma síncrona; en el siguiente microtask ya no lo es.
+    (async () => {
+      await Promise.resolve();
+      // Con resultado en caché no se consulta: lo que el usuario ya tenía es lo que debe ver al volver.
+      if (vivo && !vistaInicial?.resultado) {
+        await cargar({ filtro: "", proyeccion: "", orden: "" }, 0, TAMANOS_DE_PAGINA[0]);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+    // `vistaInicial` es estable (se lee una sola vez al montar) y el resto son las dependencias de antes.
+  }, [cargar, vistaInicial]);
+
+  const claveDe = (doc: Record<string, unknown>, i: number) =>
+    String(doc._id ? JSON.stringify(doc._id) : i);
+
+  /** Documento con el borrador aplicado, para pintar. */
+  const conBorrador = (doc: Record<string, unknown>, clave: string) => ({
+    ...doc,
+    ...(borradores[clave] ?? {}),
+  });
+
+  function editarCampo(clave: string, campo: string, valor: unknown) {
+    setBorradores((prev) => ({
+      ...prev,
+      [clave]: { ...(prev[clave] ?? {}), [campo]: valor },
+    }));
+    setErroresDoc((prev) => ({ ...prev, [clave]: null }));
+  }
+
+  function revertir(clave: string) {
+    setBorradores((prev) => {
+      const copia = { ...prev };
+      delete copia[clave];
+      return copia;
+    });
+    setErroresDoc((prev) => ({ ...prev, [clave]: null }));
+  }
+
+  async function guardar(doc: Record<string, unknown>, clave: string) {
+    const original = doc;
+    const borrador = borradores[clave] ?? {};
+    const cambios = cambiosRespectoA(original, borrador);
+    if (Object.keys(cambios).length === 0) return;
+
+    // `antes` = valor que tenía el servidor para los campos que se tocan: el driver solo escribe si
+    // siguen iguales (así no se pisa un cambio ajeno hecho mientras se editaba).
+    const antes: Record<string, unknown> = {};
+    for (const campo of Object.keys(cambios)) {
+      if (Object.prototype.hasOwnProperty.call(original, campo)) antes[campo] = original[campo];
+    }
+
+    setGuardando((prev) => ({ ...prev, [clave]: true }));
+    setErroresDoc((prev) => ({ ...prev, [clave]: null }));
+    try {
+      const { documento } = await mongoUpdate({
+        sessionId: session.sessionId,
+        coleccion,
+        id: original._id,
+        cambios,
+        antes,
+      });
+      // Se reemplaza por lo que devolvió el servidor (no por el borrador): si la base normalizó algo,
+      // la tarjeta muestra la verdad.
+      setResultado((prev) =>
+        prev
+          ? {
+              ...prev,
+              documentos: prev.documentos.map((d) =>
+                claveDe(d, 0) === clave ? documento : d
+              ),
+            }
+          : prev
+      );
+      setBorradores((prev) => {
+        const copia = { ...prev };
+        delete copia[clave];
+        return copia;
+      });
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : String(err);
+      setErroresDoc((prev) => ({ ...prev, [clave]: mensaje.replace(/^Error:\s*/, "") }));
+    } finally {
+      setGuardando((prev) => ({ ...prev, [clave]: false }));
+    }
+  }
+
+  /** Abre el diálogo en el modo pedido. */
+  function abrirDialogo(modo: ModoDeDocumento, doc?: Record<string, unknown>) {
+    setDialogoError(null);
+    const texto =
+      modo === "insertar"
+        ? '{\n  \n}'
+        : modo === "duplicar" && doc
+          ? plantillaParaDuplicar(doc)
+          : doc
+            ? plantillaParaEditar(doc)
+            : "{}";
+    setDialogo({ modo, texto, original: doc });
+  }
+
+  async function guardarDialogo(documento: Record<string, unknown>) {
+    if (!dialogo) return;
+    setDialogoGuardando(true);
+    setDialogoError(null);
+    try {
+      if (dialogo.modo === "editar" && dialogo.original) {
+        // Se reutiliza el camino de la fase 85: solo los campos distintos, con los valores originales
+        // como filtro (si el documento cambió por fuera, avisa en vez de sobrescribir).
+        const cambios = cambiosRespectoA(dialogo.original, documento);
+        if (Object.keys(cambios).length === 0) {
+          setDialogo(null);
+          return;
+        }
+        const antes: Record<string, unknown> = {};
+        for (const campo of Object.keys(cambios)) {
+          if (Object.prototype.hasOwnProperty.call(dialogo.original, campo)) antes[campo] = dialogo.original[campo];
+        }
+        const { documento: actualizado } = await mongoUpdate({
+          sessionId: session.sessionId,
+          coleccion,
+          id: dialogo.original._id,
+          cambios,
+          antes,
+        });
+        const clave = claveDe(dialogo.original, 0);
+        setResultado((prev) =>
+          prev
+            ? { ...prev, documentos: prev.documentos.map((d) => (claveDe(d, 0) === clave ? actualizado : d)) }
+            : prev
+        );
+      } else {
+        const { documento: creado } = await mongoInsert({
+          sessionId: session.sessionId,
+          coleccion,
+          documento,
+        });
+        // El nuevo entra arriba de la página actual y el total sube: se ve al instante sin recargar.
+        setResultado((prev) =>
+          prev
+            ? { ...prev, documentos: [creado, ...prev.documentos].slice(0, porPagina), total: prev.total + 1 }
+            : prev
+        );
+      }
+      setDialogo(null);
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : String(err);
+      setDialogoError(mensaje.replace(/^Error:\s*/, ""));
+    } finally {
+      setDialogoGuardando(false);
+    }
+  }
+
+  async function borrarDocumento() {
+    if (!porBorrar) return;
+    setBorrando(true);
+    setBorrarError(null);
+    try {
+      const { eliminados } = await mongoDelete({
+        sessionId: session.sessionId,
+        coleccion,
+        id: porBorrar._id,
+      });
+      const clave = claveDe(porBorrar, 0);
+      setResultado((prev) =>
+        prev
+          ? {
+              ...prev,
+              documentos: prev.documentos.filter((d) => claveDe(d, 0) !== clave),
+              // Si ya no estaba (0), el total no baja: la lista ya no lo tenía.
+              total: eliminados > 0 ? Math.max(0, prev.total - 1) : prev.total,
+            }
+          : prev
+      );
+      setBorradores((prev) => {
+        const copia = { ...prev };
+        delete copia[clave];
+        return copia;
+      });
+      setPorBorrar(null);
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : String(err);
+      setBorrarError(mensaje.replace(/^Error:\s*/, ""));
+    } finally {
+      setBorrando(false);
+    }
+  }
+
+  const total = resultado?.total ?? 0;
+  const desde = total === 0 ? 0 : pagina * porPagina + 1;
+  const hasta = Math.min(total, (pagina + 1) * porPagina);
+  const haySiguiente = hasta < total;
+
+  function irA(p: number, tamano = porPagina) {
+    setPagina(p);
+    void cargar(aplicado, p, tamano);
+  }
+
+  /*
+   * Cada cambio de la vista se guarda en el caché de la pestaña: es lo que hace que cambiar de
+   * colección y volver no pierda el resultado, el filtro, la página ni los borradores sin guardar.
+   */
+  React.useEffect(() => {
+    cacheDeVistasMongo.escribir(pestanaId, {
+      filtro,
+      proyeccion,
+      orden,
+      opcionesAbiertas,
+      aplicado,
+      pagina,
+      porPagina,
+      vista,
+      resultado,
+      borradores,
+      erroresDoc,
+    });
+  }, [pestanaId, filtro, proyeccion, orden, opcionesAbiertas, aplicado, pagina, porPagina, vista, resultado, borradores, erroresDoc]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-editor">
+      {/* --- Barra de consulta ------------------------------------------------ */}
+      <div className="flex shrink-0 flex-col gap-1 border-b border-gdb-border px-2 py-1.5">
+        <div className="flex items-center gap-1">
+          <MongoQueryField
+            valor={filtro}
+            onCambio={setFiltro}
+            onEnter={buscar}
+            campos={campos}
+            placeholder={'{ campo: "valor" }  ó  { edad: { $gt: 30 } }'}
+            ariaLabel="Filtro de documentos"
+          />
+          <Button
+            size="sm"
+            onClick={buscar}
+            disabled={cargando}
+            title="Buscar (⏎)"
+            className="h-7 gap-1.5 px-2.5"
+          >
+            {cargando ? "Buscando…" : "Buscar"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setFiltro("");
+              setProyeccion("");
+              setOrden("");
+              setAplicado({ filtro: "", proyeccion: "", orden: "" });
+              setPagina(0);
+              void cargar({ filtro: "", proyeccion: "", orden: "" }, 0, porPagina);
+            }}
+            title="Limpiar el filtro"
+            className="h-7 border-gdb-border bg-transparent px-2"
+          >
+            Limpiar
+          </Button>
+          {/*
+            Sugerencias: el usuario no usa Mongo a diario y tenía que buscar por fuera cómo se escribe
+            lo que en SQL sabe de memoria («¿un LIKE?»). Cada entrada trae su equivalente en SQL y
+            pega la plantilla en la barra. Las plantillas están probadas para que SE EJECUTEN
+            (mongo-snippets.test.ts), no son ejemplos de adorno.
+          */}
+          <DropdownMenu>
+            {/* `DropdownMenuTrigger` de base-ui no acepta `asChild`: se estiliza él mismo. */}
+            <DropdownMenuTrigger
+              title="Sugerencias de consulta (con su equivalente en SQL)"
+              aria-label="Sugerencias de consulta"
+              className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-gdb-fg hover:bg-gdb-hover data-[popup-open]:bg-gdb-hover"
+            >
+              Sugerencias
+              <span aria-hidden="true" className="text-[9px]">
+                ▾
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="max-h-[70vh] w-[380px] overflow-auto border-gdb-border bg-popover p-1 text-gdb-fg"
+            >
+              {SUGERENCIAS_MONGO.map((grupo) => (
+                <DropdownMenuGroup key={grupo.titulo}>
+                  <DropdownMenuLabel className="px-2 py-1 text-[10px] uppercase tracking-wide text-gdb-fgmuted">
+                    {grupo.titulo}
+                  </DropdownMenuLabel>
+                  {grupo.items.map((item) => (
+                    <DropdownMenuItem
+                      key={item.etiqueta}
+                      onClick={() => {
+                        // Reemplaza el filtro entero: la plantilla es una condición completa; lo que
+                        // hubiera escrito se perdería a propósito para no dejar JSON a medias.
+                        setFiltro(item.plantilla);
+                        setAplicado({ filtro: item.plantilla, proyeccion, orden });
+                        setPagina(0);
+                        void cargar({ filtro: item.plantilla, proyeccion, orden }, 0, porPagina);
+                        // El campo coloca el cursor al final; el usuario escribe encima del valor de
+                        // ejemplo. (El hueco seleccionado automáticamente llega con el foco, que el
+                        // `DropdownMenuItem` se lleva al cerrarse.)
+                      }}
+                      className="flex flex-col items-start gap-0.5 px-2 py-1.5 text-xs"
+                    >
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="text-gdb-fgstrong">{item.etiqueta}</span>
+                        {item.sql && (
+                          <span className="shrink-0 rounded bg-gdb-field px-1 font-jetbrains text-[9px] text-gdb-fgmuted">
+                            {item.sql}
+                          </span>
+                        )}
+                      </span>
+                      <span className="w-full truncate font-jetbrains text-[10px] text-gdb-fgmuted">
+                        {item.plantilla}
+                      </span>
+                      {item.nota && (
+                        <span className="w-full text-[10px] leading-snug text-gdb-fgdim">{item.nota}</span>
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {!session.readOnly && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => abrirDialogo("insertar")}
+              title="Insertar un documento nuevo"
+              className="h-7 border-gdb-border bg-transparent px-2"
+            >
+              + Documento
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setOpcionesAbiertas((a) => !a)}
+            title="Proyección y orden"
+            aria-expanded={opcionesAbiertas}
+            className="h-7 px-2 text-xs"
+          >
+            Opciones {opcionesAbiertas ? "▴" : "▾"}
+          </Button>
+        </div>
+
+        {opcionesAbiertas && (
+          <div className="flex items-center gap-1">
+            <MongoQueryField
+              valor={proyeccion}
+              onCambio={setProyeccion}
+              campos={campos}
+              placeholder="{ campo: 1 } — proyección"
+              ariaLabel="Proyección"
+            />
+            <MongoQueryField
+              valor={orden}
+              onCambio={setOrden}
+              onEnter={buscar}
+              campos={campos}
+              placeholder="{ campo: -1 } — orden"
+              ariaLabel="Orden"
+            />
+          </div>
+        )}
+
+        {/* --- Contador y paginación, a la derecha como en Compass ------------ */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 text-[11px] text-gdb-fgmuted">
+            <IjIcon name="mongodb" className="size-3.5 text-gdb-enginemongo" />
+            <span className="font-jetbrains">{coleccion}</span>
+            {resultado && (
+              <span>
+                · {desde}–{hasta} de {total} · {resultado.ms} ms
+              </span>
+            )}
+            {cargando && !resultado && <span>· cargando…</span>}
+          </div>
+          <div className="flex items-center gap-1">
+            <select
+              value={porPagina}
+              onChange={(e) => {
+                const tamano = Number(e.target.value);
+                setPorPagina(tamano);
+                irA(0, tamano);
+              }}
+              aria-label="Documentos por página"
+              className="h-6 rounded border border-gdb-border bg-gdb-field px-1 text-[11px] text-gdb-fg"
+            >
+              {TAMANOS_DE_PAGINA.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={pagina === 0 || cargando}
+              onClick={() => irA(pagina - 1)}
+              title="Página anterior"
+              className="h-6 w-6"
+            >
+              ‹
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={!haySiguiente || cargando}
+              onClick={() => irA(pagina + 1)}
+              title="Página siguiente"
+              className="h-6 w-6"
+            >
+              ›
+            </Button>
+            <div className="ml-1 flex items-center rounded border border-gdb-border">
+              {(["lista", "json"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setVista(v)}
+                  title={v === "lista" ? "Vista de tarjetas" : "Vista JSON"}
+                  className={cn(
+                    "px-1.5 py-[1px] text-[10px]",
+                    vista === v ? "bg-gdb-hover text-gdb-fgstrong" : "text-gdb-fgmuted hover:text-gdb-fg"
+                  )}
+                >
+                  {v === "lista" ? "Lista" : "JSON"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* --- Documentos ------------------------------------------------------ */}
+      <div className="min-h-0 flex-1 overflow-auto p-2">
+        {error && (
+          <div
+            role="alert"
+            className="mb-2 rounded border border-gdb-dangerbg bg-gdb-dangerbg px-2 py-1.5 font-jetbrains text-[11px] text-gdb-dangerfg"
+          >
+            {error}
+          </div>
+        )}
+        {!error && resultado && resultado.documentos.length === 0 && (
+          <p className="px-2 py-6 text-center text-xs text-gdb-fgmuted">
+            No hay documentos que cumplan el filtro.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          {resultado?.documentos.map((doc, i) => {
+            const clave = claveDe(doc, pagina * porPagina + i);
+            return (
+              <TarjetaDeDocumento
+                key={clave}
+                doc={conBorrador(doc, clave)}
+                original={doc}
+                indice={pagina * porPagina + i + 1}
+                vista={vista}
+                editable={!session.readOnly}
+                guardando={Boolean(guardando[clave])}
+                error={erroresDoc[clave] ?? null}
+                onCambio={(campo, valor) => editarCampo(clave, campo, valor)}
+                onRevertir={() => revertir(clave)}
+                onGuardar={() => void guardar(doc, clave)}
+                onEditarJson={() => abrirDialogo("editar", doc)}
+                onDuplicar={() => abrirDialogo("duplicar", doc)}
+                onBorrar={() => {
+                  setBorrarError(null);
+                  setPorBorrar(doc);
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <MongoDocumentDialog
+        abierto={dialogo !== null}
+        modo={dialogo?.modo ?? "insertar"}
+        textoInicial={dialogo?.texto ?? "{}"}
+        onCerrar={() => setDialogo(null)}
+        onGuardar={(documento) => void guardarDialogo(documento)}
+        guardando={dialogoGuardando}
+        errorServidor={dialogoError}
+      />
+
+      <MongoBorrarDialog
+        abierto={porBorrar !== null}
+        resumen={porBorrar?._id !== undefined ? `_id: ${JSON.stringify(porBorrar._id)}` : ""}
+        onCerrar={() => setPorBorrar(null)}
+        onConfirmar={() => void borrarDocumento()}
+        borrando={borrando}
+        error={borrarError}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,437 @@
+/*
+ * Pintura del editor propio (spike F2-B). Todo con tokens `--gdb-*`: el mismo editor se ve igual en
+ * Darcula, New UI Dark y New UI Light, y la densidad la fija `--ld-line-height` (20 px, la misma
+ * que usa el componente en su aritmética de posiciones).
+ *
+ * NADA de sombras ni bordes: un editor de código es una superficie plana. La jerarquía la dan el
+ * canal de números (fondo propio), el color del texto y la fila del cursor.
+ */
+
+.ld-root {
+  position: relative;
+  overflow: hidden;
+  background: var(--gdb-editor);
+  color: var(--gdb-fg);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 13px;
+  line-height: 20px;
+  /* Las métricas del componente (20 px de línea, 13 px de fuente) viven en su aritmética; si se
+     tocan aquí hay que tocarlas allí. */
+  --ld-line-height: 20px;
+}
+
+.ld-scroller {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  /* Selección del navegador apagada: la pinta el componente. */
+  user-select: none;
+}
+
+.ld-scroller::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.ld-scroller::-webkit-scrollbar-track,
+.ld-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.ld-scroller::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--gdb-fg) 24%, transparent);
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+}
+
+.ld-scroller::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--gdb-fg) 40%, transparent);
+}
+
+.ld-content {
+  position: relative;
+  min-width: 100%;
+}
+
+.ld-line {
+  position: absolute;
+  left: 0;
+  height: var(--ld-line-height);
+  line-height: var(--ld-line-height);
+  white-space: pre;
+  display: flex;
+  align-items: center;
+}
+
+.ld-ln {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  box-sizing: border-box;
+  padding-right: 10px;
+  text-align: right;
+  color: color-mix(in srgb, var(--gdb-fg) 42%, transparent);
+  /* El canal tiene SU fondo (como el `Gutter.background` de DataGrip): sin él, el número se mezcla
+     con el texto al desplazar en horizontal y la columna deja de leerse como una columna. */
+  background: var(--gdb-gutter);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.ld-ln-activo {
+  color: var(--gdb-fg);
+}
+
+.ld-text {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  white-space: pre;
+  color: var(--gdb-fg);
+}
+
+.ld-selection {
+  position: absolute;
+  z-index: 1;
+  height: var(--ld-line-height);
+  background: color-mix(in srgb, var(--gdb-sel) 88%, transparent);
+  pointer-events: none;
+}
+
+.ld-caret {
+  position: absolute;
+  z-index: 4;
+  width: 2px;
+  height: var(--ld-line-height);
+  background: var(--gdb-caret);
+  pointer-events: none;
+  animation: ld-blink 1.06s steps(1, end) infinite;
+}
+
+/*
+  F2: los cursores SECUNDARIOS del multicursor. Mismo trazo, sin parpadeo y algo más tenues: el
+  parpadeo sincronizado de cinco cursores distrae, y el usuario necesita distinguir cuál es el
+  primario (el que mueven ↑/↓ y el que refleja el IME).
+*/
+.ld-caret-sec {
+  opacity: 0.6;
+  animation: none;
+}
+
+@keyframes ld-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.ld-composing {
+  position: absolute;
+  z-index: 4;
+  white-space: pre;
+  border-bottom: 1px solid var(--gdb-fg);
+  pointer-events: none;
+}
+
+/*
+ * El campo que recibe el teclado. No es `display:none` ni `visibility:hidden`: así no recibe foco
+ * ni IME. Va transparente, de 1×1, pegado al cursor, para que la ventanita del IME de macOS salga
+ * donde está el cursor y no en la esquina.
+ */
+.ld-input {
+  position: absolute;
+  z-index: 5;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 20px;
+  caret-color: transparent;
+}
+
+/* Tokens de sintaxis → tokens del tema. */
+.ld-kw {
+  color: var(--gdb-kw);
+}
+
+.ld-str {
+  color: var(--gdb-str);
+}
+
+.ld-num {
+  color: var(--gdb-num);
+}
+
+.ld-com {
+  color: var(--gdb-comment);
+  font-style: italic;
+}
+
+.ld-fn {
+  color: var(--gdb-fn);
+}
+
+.ld-type {
+  color: var(--gdb-link);
+}
+
+.ld-var {
+  color: var(--gdb-fg);
+}
+
+/* Columna de una tabla (nombre resuelto por el llamador contra el esquema). El color sale del tema
+   —`col` en `themes.ts`—, así que cambiar de tema o editar la paleta la repinta con lo demás. */
+.ld-col {
+  color: var(--gdb-col);
+}
+
+.ld-op {
+  color: color-mix(in srgb, var(--gdb-fg) 88%, transparent);
+}
+
+/* La línea del cursor. Es lo que hace que el editor «sepa dónde estás» sin leer el canal. */
+/*
+  Contorno de la sentencia actual (DataGrip): 1 px verde alrededor del texto. Va por encima de la fila
+  del cursor y por debajo del texto; no recibe clics. El color es un token (`stmtoutline`).
+*/
+.ld-statement {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ld-statement path {
+  fill: none;
+  stroke: var(--gdb-stmtoutline);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.ld-active-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  height: var(--ld-line-height);
+  background: var(--gdb-caretrow);
+  pointer-events: none;
+}
+
+/*
+ * Popup de autocompletado. Usa la tipografía de INTERFAZ (no la mono del código): la lista es
+ * chrome, como en VS Code, y mezclar anchos variables con el texto de fondo ensucia la lectura.
+ * 4 px de radio y sin borde grueso: la misma familia visual que la barra de buscar.
+ */
+.ld-popup {
+  position: absolute;
+  z-index: 12;
+  /* El ancho lo fija el componente (`popupWidthFor`, R89): sale de la fila más larga y se acota al
+     área visible. Antes era `max-width: 340px` y los nombres largos se cortaban. */
+  min-width: 260px;
+  max-height: 264px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 3px;
+  background: var(--gdb-chrome);
+  color: var(--gdb-fg);
+  border: 1px solid var(--gdb-borderstrong);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 12px;
+}
+
+/*
+  Fila como en DataGrip: 22 px de alto, icono de 16 y una sola línea. Antes el punto de tipo era un
+  círculo de 6 px: no decía nada sin distinguir colores y el hueco se veía vacío a la izquierda.
+*/
+.ld-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.ld-popup-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* Las filas sin icono (palabras clave, snippets) reservan el hueco: las etiquetas quedan alineadas. */
+.ld-popup-icon-vacio {
+  width: 16px;
+}
+
+.ld-popup-item-sel {
+  background: var(--gdb-listsel);
+  color: var(--gdb-fgstrong);
+}
+
+/*
+  Si la fila no cabe, cede el DETALLE (tipo, tabla de origen), nunca el nombre: el detalle encoge 20
+  veces más rápido (`flex-shrink`) y lleva su propia elipsis. El nombre solo se corta si por sí solo
+  es más ancho que el popup entero. El texto completo queda en el `title` de la fila.
+*/
+.ld-popup-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ld-popup-detail {
+  flex: 0 20 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: auto;
+  padding-left: 12px;
+  color: color-mix(in srgb, var(--gdb-fg) 65%, transparent);
+  font-size: 11px;
+}
+
+.ld-popup-item-sel .ld-popup-detail {
+  color: color-mix(in srgb, var(--gdb-fgstrong) 88%, transparent);
+}
+
+/*
+  Color del NOMBRE por tipo, con los tokens de sintaxis del editor: la tabla se lee como objeto
+  fuerte, la columna como texto normal y la función del motor con el color de función. Es lo que
+  separa «lo de la tabla» de «lo que trae el motor» sin leer la etiqueta de la derecha.
+*/
+.ld-popup-item-table .ld-popup-label {
+  color: var(--gdb-fgstrong);
+}
+
+.ld-popup-item-column .ld-popup-label {
+  color: var(--gdb-fg);
+}
+
+.ld-popup-item-function .ld-popup-label {
+  color: var(--gdb-fn);
+}
+
+.ld-popup-item-keyword .ld-popup-label {
+  color: var(--gdb-kw);
+}
+
+.ld-popup-item-snippet .ld-popup-label {
+  color: var(--gdb-muted);
+}
+
+/* R89: el alias se lee como tabla; la relación por FK, como objeto fuerte (es la que se busca). */
+.ld-popup-item-alias .ld-popup-label,
+.ld-popup-item-join .ld-popup-label,
+.ld-popup-item-schema .ld-popup-label {
+  color: var(--gdb-fgstrong);
+}
+
+.ld-popup-match {
+  color: var(--gdb-link);
+  font-weight: 700;
+}
+
+.ld-popup-item-sel .ld-popup-match {
+  /* El acento SE MANTIENE en la fila seleccionada: si se pinta del mismo color que el resto, el
+     resaltado desaparece justo en la fila que se está mirando (medido en la captura). */
+  color: var(--gdb-link);
+}
+
+/* Coincidencias de la barra de buscar: por detrás de la selección y del texto. */
+.ld-find {
+  position: absolute;
+  z-index: 1;
+  height: var(--ld-line-height);
+  background: color-mix(in srgb, var(--gdb-accent) 26%, transparent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Subrayado de inspección: línea punteada al pie de la línea, con el color de la severidad. */
+.ld-lint {
+  position: absolute;
+  z-index: 2;
+  height: var(--ld-line-height);
+  border-bottom: 2px dotted var(--gdb-icred);
+  pointer-events: none;
+}
+
+/* Punto del canal para una línea con inspección. */
+.ld-ln-lint {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--gdb-icred);
+}
+
+
+/*
+  F2 — plegado. La flecha vive en el canal, a la izquierda del número de línea, y solo aparece en
+  las líneas que abren un bloque. El «⋯ N» va al final del texto de esa línea: es el dato que
+  DataGrip muestra al colapsar (cuántas líneas hay debajo sin ver).
+*/
+.ld-fold {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: var(--ld-line-height);
+  color: var(--gdb-fgdim);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 80ms linear;
+}
+.ld-root:hover .ld-fold,
+.ld-fold-cerrado,
+.ld-fold:focus-visible {
+  opacity: 1;
+}
+.ld-fold:hover {
+  color: var(--gdb-fgstrong);
+}
+
+.ld-fold-badge {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--gdb-border);
+  border-radius: 3px;
+  color: var(--gdb-fgdim);
+  font-size: 10px;
+  vertical-align: middle;
+}

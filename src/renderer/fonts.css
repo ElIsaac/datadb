@@ -1,0 +1,23 @@
+/*
+ * Tipografias self-hosted (R35, adelantado a la fase 1).
+ *
+ * Por que no es opcional: globals.css declara `--font-sans: var(--font-inter)` y
+ * `--font-mono: var(--font-jetbrains-mono)` dentro de `@theme inline`, y esas variables las
+ * inyectaba next/font/google desde layout.tsx. Fuera de Next nadie las define y toda la UI
+ * caeria en silencio al fallback del sistema.
+ *
+ * Pesos: los mismos que pedia layout.tsx (400, 500, 600, 700). Ambas fuentes son OFL-1.1.
+ */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+:root {
+  --font-inter: "Inter", system-ui, sans-serif;
+  --font-jetbrains-mono: "JetBrains Mono", ui-monospace, monospace;
+}

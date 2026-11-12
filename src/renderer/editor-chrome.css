@@ -1,0 +1,65 @@
+/*
+ * ============================================================================================
+ * Spike F2 · el chrome del editor deja de parecer un navegador
+ * ============================================================================================
+ * Lo que se quita aquí es exactamente lo que delataba al editor como «página web», y son las
+ * mismas piezas que VS Code —que también es Electron— sustituye:
+ *
+ *   · la barra de desplazamiento del navegador (ancha, con carriles y flechas) por una superpuesta
+ *     y fina, del color del texto y no del sistema;
+ *   · la selección nativa azul del navegador, que asoma por debajo de la capa de `drawSelection`
+ *     cuando el foco entra o sale: dentro del editor la selección la pinta el tema, no Chromium;
+ *   · el anillo de foco del reset de Tailwind, que dibuja un rectángulo claro alrededor del área de
+ *     texto al clicar (el foco del editor es el cursor, no un borde);
+ *   · el cursor cuadrado de 1 px, que en una pantalla Retina se ve como una línea gruesa y borrosa.
+ *
+ * Y se añade el resaltado de TODAS las coincidencias de la barra propia (`.cm-find-match`), que es
+ * lo que hace DataGrip mientras se teclea en Buscar.
+ */
+@layer base {
+  .cm-scroller::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  .cm-scroller::-webkit-scrollbar-track,
+  .cm-scroller::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /*
+   * El borde de 3 px transparente + `background-clip: content-box` es el truco para que el pulgar
+   * quede de 5 px dentro de un canal de 11: sin él, el pulgar ocupa todo el canal y parece la barra
+   * del navegador con otro color.
+   */
+  .cm-scroller::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--gdb-fg) 24%, transparent);
+    border: 3px solid transparent;
+    border-radius: 8px;
+    background-clip: content-box;
+  }
+
+  .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--gdb-fg) 40%, transparent);
+  }
+
+  /* La selección del navegador no se ve nunca dentro del editor: manda `drawSelection`. */
+  .cm-editor ::selection {
+    background: transparent;
+  }
+
+  /* El foco del editor es el cursor: ni halo ni borde. */
+  .cm-editor.cm-focused {
+    outline: none !important;
+  }
+
+  .cm-editor .cm-cursor {
+    border-left-width: 1.5px;
+  }
+
+  /* Coincidencias de la barra de buscar/reemplazar (spike F2, `src/lib/editor-find.ts`). */
+  .cm-find-match {
+    background-color: color-mix(in srgb, var(--gdb-accent) 30%, transparent);
+    border-radius: 2px;
+  }
+}

@@ -1,0 +1,66 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+/test-results
+
+# salida de electron-vite (main, preload y renderer compilados)
+/out/
+
+# recursos de empaquetado (build/icon.png) SÍ se versionan: electron-builder los lee de aquí
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# typescript
+*.tsbuildinfo
+
+# Datos locales. Desde la fase 5 viven en app.getPath("userData"), pero `data/` puede
+# reaparecer si se usa el override DATADB_DATA_DIR, y `data.migrado/` es lo que la
+# migración de esa fase apartó: NUNCA se comitean (secrets.json y, hasta la fase 17,
+# contraseñas en claro en connections.json).
+/data/
+/data.migrado/
+/prompts/
+.artifacts/
+
+# kimi code local config
+.kimi-code/
+
+# editores / OS
+.vscode/
+Thumbs.db
+*.swp
+data/
+
+# Git worktrees locales
+/.worktrees/
+
+# Hoja de contacto de iconos (generada por npm run icons:sheet; artefacto de revisión)
+/design/contact-sheet.html
+
+# Artefactos de empaquetado (fase 28)
+release/
+
+# logs de sondas CDP locales
+sonda-*.log

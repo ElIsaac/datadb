@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es" class="h-full antialiased dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      CSP estricta: sin eval, sin recursos remotos. El renderer solo carga lo que empaqueta
+      Vite (R3). 'unsafe-inline' en style-src es necesario para Tailwind/CodeMirror/xyflow,
+      que inyectan <style> en runtime. En desarrollo Vite necesita ademas conectarse a su
+      servidor HMR por ws://localhost, por eso connect-src permite localhost.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*"
+    />
+    <title>DataDB</title>
+  </head>
+  <body class="min-h-full flex flex-col">
+    <div id="root"></div>
+    <!--
+      Fase 11: `glide-data-grid` EXIGE este div como último hijo del <body> para montar el overlay
+      de edición de celda. Sin él, abrir cualquier editor falla con «portal not found» y ninguna
+      celda se puede editar — sin más aviso que un error en consola.
+    -->
+    <div id="portal" style="position: fixed; left: 0; top: 0; z-index: 60"></div>
+    <script type="module" src="/src/renderer/main.tsx"></script>
+  </body>
+</html>

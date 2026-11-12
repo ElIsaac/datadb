@@ -1,0 +1,326 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* Capa semántica --gdb-* (fase 7, R33): valores por defecto + utilidades bg-gdb-*. Generado. */
+@import "../theme/tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-jetbrains: var(--font-jetbrains-mono);
+  --font-heading: var(--font-inter);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Tokens de shadcn → capa semántica --gdb-* (fase 7, T3).
+ *
+ * shadcn sigue siendo la API de los componentes (`bg-background`, `text-muted-foreground`…); lo que
+ * cambia es de dónde sale el color. Así los componentes existentes cambian de tema sin editarse.
+ * Antes había dos bloques con hex propios (`:root` claro y `.dark`); la clase `.dark` ya no aporta
+ * colores: solo activa las variantes `dark:` y la alterna theme-store.ts según el tema.
+ *
+ * Decisión: `--muted-foreground` va a `--gdb-fgdim` y NO a `--gdb-muted` (= `Component.infoForeground`
+ * de JetBrains, #787878 en Darcula). La app usa `text-muted-foreground` para etiquetas y texto de lectura,
+ * y con `infoForeground` quedaría en 2,4:1 sobre el chrome; con `fgdim` queda ~4,9:1. `--gdb-muted`
+ * se reserva para texto terciario (metadatos del árbol, tipos de columna), como en DataGrip.
+ */
+:root {
+  --background: var(--gdb-chrome);
+  --foreground: var(--gdb-fg);
+  --card: var(--gdb-chrome);
+  --card-foreground: var(--gdb-fg);
+  --popover: var(--gdb-chrome);
+  --popover-foreground: var(--gdb-fg);
+  --primary: var(--gdb-btnprimary);
+  --primary-foreground: var(--gdb-onaccent);
+  --secondary: var(--gdb-btn);
+  --secondary-foreground: var(--gdb-fg);
+  --muted: var(--gdb-hover);
+  --muted-foreground: var(--gdb-fgdim);
+  --accent: var(--gdb-hover);
+  --accent-foreground: var(--gdb-fgstrong);
+  /* Rojo de TEXTO legible (errfg), no --gdb-fail: shadcn usa `destructive` como texto y tinte
+     (`text-destructive`, `bg-destructive/10`); con fail daba 2,0–3,0:1. Medido en la fase 7. */
+  --destructive: var(--gdb-errfg);
+  --border: var(--gdb-sep);
+  --input: var(--gdb-border);
+  --ring: var(--gdb-focus);
+  --chart-1: var(--gdb-accent);
+  --chart-2: var(--gdb-okfg);
+  --chart-3: var(--gdb-warn);
+  --chart-4: var(--gdb-const);
+  --chart-5: var(--gdb-fail);
+  /* Component.arc del tema: 5 px en Darcula, 8 px en la New UI. */
+  --radius: var(--gdb-arc);
+  --sidebar: var(--gdb-chrome);
+  --sidebar-foreground: var(--gdb-fg);
+  --sidebar-primary: var(--gdb-btnprimary);
+  --sidebar-primary-foreground: var(--gdb-onaccent);
+  --sidebar-accent: var(--gdb-hover);
+  --sidebar-accent-foreground: var(--gdb-fgstrong);
+  --sidebar-border: var(--gdb-sep);
+  --sidebar-ring: var(--gdb-focus);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  .cm-editor {
+    font-family: var(--font-jetbrains-mono), monospace !important;
+  }
+
+  .cm-scroller {
+    position: relative;
+  }
+
+  .cm-active-stmt-first {
+    border-top: 2px solid var(--gdb-okfg);
+    border-left: 2px solid var(--gdb-okfg);
+    border-right: 2px solid var(--gdb-okfg);
+  }
+
+  .cm-active-stmt-mid {
+    border-left: 2px solid var(--gdb-okfg);
+    border-right: 2px solid var(--gdb-okfg);
+  }
+
+  .cm-active-stmt-last {
+    border-bottom: 2px solid var(--gdb-okfg);
+    border-left: 2px solid var(--gdb-okfg);
+    border-right: 2px solid var(--gdb-okfg);
+  }
+
+  .cm-active-stmt-single {
+    border: 2px solid var(--gdb-okfg);
+  }
+
+  /* La capa de selección debe pintarse SIEMPRE por encima del contenido.
+     Sin esto, .cm-content/.cm-line pueden tapar los bordes de la selección.
+     También neutralizamos el outline del reset global de Tailwind
+     (* { outline-ring/50 }) que pinta una línea gris sobre la selección. */
+  .cm-editor .cm-scroller,
+  .cm-editor .cm-content,
+  .cm-editor .cm-line,
+  .cm-editor .cm-selectionLayer,
+  .cm-editor .cm-selectionBackground {
+    outline: none !important;
+    outline-offset: 0 !important;
+  }
+
+  .cm-content,
+  .cm-line {
+    background: transparent !important;
+  }
+
+  .cm-selectionLayer {
+    z-index: 2;
+  }
+
+  /* drawSelection() posiciona los rectángulos con top/height absolutos.
+     padding vertical de 1px con content-box extiende cada rectángulo
+     en ambas direcciones para cubrir gaps de subpixel rendering.
+     Un alpha < 1 deja que el borde verde izquierdo de la sentencia
+     activa (.cm-active-statement-line) sea visible a través de la selección. */
+  .cm-selectionBackground {
+    padding: 1px 0;
+    box-sizing: content-box;
+    /* Selección del tema (Darcula #214283) al 85 %: deja ver el borde de la sentencia activa. */
+    background: color-mix(in srgb, var(--gdb-sel) 85%, transparent) !important;
+  }
+
+  /* Popups del editor = Popup.background / CompletionPopup del tema (fase 7, T6). */
+  .cm-tooltip {
+    border: none !important;
+    background-color: var(--gdb-chrome) !important;
+    color: var(--gdb-fg) !important;
+    border-radius: calc(var(--radius) - 2px) !important;
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.3),
+      0 4px 6px -4px rgb(0 0 0 / 0.3) !important;
+    z-index: 100 !important;
+  }
+
+  .cm-tooltip-autocomplete {
+    background-color: var(--gdb-chrome) !important;
+    color: var(--gdb-fg) !important;
+    border: 1px solid var(--gdb-borderstrong) !important;
+    border-radius: calc(var(--radius) - 2px) !important;
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.3),
+      0 4px 6px -4px rgb(0 0 0 / 0.3) !important;
+    padding: 4px !important;
+    overflow: hidden !important;
+  }
+
+  .cm-tooltip-autocomplete > ul {
+    max-height: 280px !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+  }
+
+  /*
+    Tipografía de la lista como la de DataGrip: la del INTERFAZ (Inter), no la del editor. Antes
+    heredaba la monoespaciada del CodeMirror a 12 px, que es lo que se veía «muy web»; DataGrip
+    usa su fuente de UI en el popup y deja la mono solo para el código.
+  */
+  .cm-tooltip-autocomplete > ul > li {
+    display: grid !important;
+    grid-template-columns: auto 1fr auto;
+    align-items: center !important;
+    gap: 6px !important;
+    min-height: 22px !important;
+    padding: 1px 6px !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    font-family: var(--font-sans) !important;
+    font-size: 12px !important;
+    line-height: 20px !important;
+    transition: background-color 80ms ease, color 80ms ease !important;
+  }
+
+  .cm-tooltip-autocomplete > ul > li[aria-selected="true"] {
+    /* CompletionPopup.selectionBackground (#113A5C en Darcula). */
+    background-color: var(--gdb-listsel) !important;
+    color: var(--gdb-fgstrong) !important;
+  }
+
+  .cm-completionLabel {
+    font-weight: 400 !important;
+    letter-spacing: 0 !important;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cm-completionDetail {
+    color: var(--gdb-muted) !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0;
+  }
+
+  .cm-completionMatchedText {
+    /* CompletionPopup.matchForeground de JetBrains (#589DF6 en Darcula): antes naranja #c59172. */
+    color: var(--gdb-link) !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+  }
+
+  /* El color de .cm-qualified-column lo define el tema del editor
+     (src/lib/editor-themes.ts), no CSS global. */
+
+  /*
+    Iconos por TIPO, como DataGrip: tabla (rejilla azul), columna (columna violeta) y función del
+    motor (círculo con ƒ). Los dibuja `iconoDeCompletion` con los mismos SVG del catálogo; aquí solo
+    se les da caja y alineación. Antes había insignias de letra «T»/«C»/«S» pintadas con ::before,
+    que no distinguían nada a 16 px.
+  */
+  .cm-gdb-completion-icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 16px !important;
+    height: 16px !important;
+    flex: none !important;
+  }
+
+  .cm-gdb-completion-icon > svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /*
+    Color del NOMBRE por tipo, con los mismos tokens de sintaxis del editor: la tabla se lee como
+    objeto fuerte, la columna como texto normal y la función del motor con el color de función —
+    así se distingue «lo de la tabla» de «lo que trae el motor» sin leer el icono.
+  */
+  .cm-tooltip-autocomplete > ul > li.cm-completion-table .cm-completionLabel {
+    color: var(--gdb-fgstrong) !important;
+  }
+
+  .cm-tooltip-autocomplete > ul > li.cm-completion-column .cm-completionLabel {
+    color: var(--gdb-fg) !important;
+  }
+
+  .cm-tooltip-autocomplete > ul > li.cm-completion-function .cm-completionLabel {
+    color: var(--gdb-fn) !important;
+  }
+
+  .cm-tooltip-autocomplete > ul > li.cm-completion-snippet .cm-completionLabel {
+    color: var(--gdb-muted) !important;
+  }
+}
+/*
+ * Iconos de IntelliJ sobre un fondo de acento (fase 8, R34/D3). Los iconos pintan con var(--gdb-ic*), así que basta
+ * redefinir esos tokens dentro del fondo azul para que se lean: medido en la ventana, el «+» gris del botón primario
+ * daba 1,15:1 en New UI Light y 2,8:1 en New UI Dark, y el botón de cabecera activo 2,3–2,6:1. JetBrains hace lo mismo
+ * con los iconos sobre una selección (los recolorea al color de texto de la selección).
+ * Se engancha a las clases de fondo de acento en vez de marcar cada botón, para que cualquier botón primario nuevo
+ * quede cubierto. `ij-on-accent` existe para fondos de acento que no usen esas clases.
+ */
+/* T4: también los roles de color (verde, rojo…): el triángulo verde de «Run» sobre el botón azul daba 2,07:1. */
+:where(.bg-primary, .bg-gdb-btnprimary, .bg-gdb-accent, .ij-on-accent) [data-ij-icon] {
+  --gdb-icstroke: var(--gdb-onaccent);
+  --gdb-icsecondary: var(--gdb-onaccent);
+  --gdb-icmuted: var(--gdb-onaccent);
+  --gdb-icgreen: var(--gdb-onaccent);
+  --gdb-icred: var(--gdb-onaccent);
+  --gdb-icyellow: var(--gdb-onaccent);
+  --gdb-icblue: var(--gdb-onaccent);
+  --gdb-icpurple: var(--gdb-onaccent);
+  --gdb-icfill: transparent;
+  --gdb-icgreenbg: transparent;
+  --gdb-icredbg: transparent;
+}
