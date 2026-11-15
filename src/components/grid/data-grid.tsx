@@ -54,7 +54,7 @@ import {
   valorBooleano,
 } from "./cell-model";
 import { desdeGridSelection, extraerSeleccion, type ExtraccionDeSeleccion } from "./copy-as";
-import { alturaDeFila, bordesVerticales, coloresDeTipo, temaDeGrid, type TokenDelGrid } from "./grid-theme";
+import { alturaDeFila, bordesVerticales, coloresDeTipo, filaAlternaDeRejilla, temaDeGrid, type TokenDelGrid } from "./grid-theme";
 import { nivelDe, ordenarIndices, siguienteOrden, type Direccion, type OrdenDeGrid } from "./sorting";
 import { filtrarIndices, parsearFiltros, type TextosDeFiltro } from "./filtering";
 import { FilterRow, type FiltroRowHandle, type PosicionDeFiltro } from "./filter-row";
@@ -397,6 +397,7 @@ export function DataGrid({
     () => temaDeGrid(leerToken, cuadricula) as Partial<Theme>,
     [leerToken, cuadricula]
   );
+  const fondoAlterno = React.useMemo(() => filaAlternaDeRejilla(leerToken), [leerToken]);
 
   // La altura de fila la marca la densidad, igual que en el resto de la UI. Sale de la tabla de
   // métricas (la misma que genera `--gdb-row`), no del documento: así la dependencia es el valor
@@ -689,6 +690,30 @@ export function DataGrid({
 
   const dibujarCelda = React.useCallback<DrawCellCallback>(
     (args, drawContent) => {
+      if (args.cell.kind === GridCellKind.Boolean) {
+        const val = Boolean(args.cell.data);
+        const { ctx, rect, theme } = args;
+        const label = val ? "true" : "false";
+        const bg = leerToken(val ? "--gdb-okbg" : "--gdb-dangerbg");
+        const fg = leerToken(val ? "--gdb-okfg" : "--gdb-dangerfg");
+        ctx.save();
+        ctx.font = '600 11px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
+        const textW = ctx.measureText(label).width;
+        const pillW = Math.ceil(textW) + 12;
+        const pillH = Math.min(18, Math.max(14, rect.height - 6));
+        const px = rect.x + theme.cellHorizontalPadding;
+        const py = rect.y + (rect.height - pillH) / 2;
+        ctx.beginPath();
+        ctx.roundRect(px, py, pillW, pillH, 3);
+        ctx.fillStyle = bg;
+        ctx.fill();
+        ctx.fillStyle = fg;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, px + 6, rect.y + rect.height / 2 + 0.5);
+        ctx.restore();
+        return;
+      }
       drawContent();
       if (!esColumnaFk) return;
       const columna = columnas[args.col];
@@ -805,7 +830,11 @@ export function DataGrid({
         smoothScrollX
         smoothScrollY
         width={tam.ancho}
-        height={tam.alto}
+        height={
+          filas.length > 0
+            ? Math.min(tam.alto, altoCabecera + bandaDeFiltros + filas.length * altoFila + 16)
+            : tam.alto
+        }
         // Selección tipo hoja de cálculo (R36): rango con ratón y teclado, columnas y filas.
         /*
           Tinte de fila para la edición por lotes: verde las nuevas, rojo las marcadas para borrar.
@@ -816,6 +845,7 @@ export function DataGrid({
           const estado = estadoDeFila?.(indices[fila] ?? fila);
           if (estado === "nueva") return { bgCell: leerToken("--gdb-okbg"), bgCellMedium: leerToken("--gdb-okbg") };
           if (estado === "borrada") return { bgCell: leerToken("--gdb-dangerbg"), bgCellMedium: leerToken("--gdb-dangerbg"), textDark: leerToken("--gdb-muted") };
+          if (fila % 2 === 1) return { bgCell: fondoAlterno };
           return undefined;
         }}
         onCellContextMenu={(celda, evento) => {

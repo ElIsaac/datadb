@@ -41,7 +41,9 @@ export const TOKENS_DEL_GRID = [
   // tokens que usaba el grid DOM (`bg-gdb-okfg/15`, `bg-gdb-fail/15`, el resalte de celda editada).
   "--gdb-diffmod",
   "--gdb-okbg",
+  "--gdb-okfg",
   "--gdb-dangerbg",
+  "--gdb-dangerfg",
   // R98: colores por tipo de dato (los de sintaxis del tema) y el acento de las casillas.
   "--gdb-num",
   "--gdb-fn",
@@ -102,7 +104,7 @@ export function alturaDeFila(valorCrudo: string, porDefecto = 24): number {
  * Solarized con su texto tenue, se quedaba corto): la línea se acerca al texto lo justo para llegar
  * al contraste pedido. Lo mide `grid.test.ts` en todos los temas.
  */
-const CONTRASTE_DE_LINEA: Record<Cuadricula, number> = { marcada: 1.9, suave: 1.35, ninguna: 1 };
+const CONTRASTE_DE_LINEA: Record<Cuadricula, number> = { marcada: 1.35, suave: 1.16, ninguna: 1 };
 
 function lineaConContraste(fondo: string, texto: string, objetivo: number): string {
   if (objetivo <= 1) return fondo;
@@ -180,6 +182,18 @@ export function seleccionDeRejilla(leer: LectorDeTokens): string {
   return sel;
 }
 
+export function filaAlternaDeRejilla(leer: LectorDeTokens): string {
+  const fondo = leer("--gdb-field");
+  const contrasteFondo = leer("--gdb-contrast");
+  const texto = leer("--gdb-fg");
+  const esHex = (v: string) => /^#[0-9A-F]{6}$/i.test(v);
+  if (!esHex(fondo)) return contrasteFondo;
+  if (esHex(contrasteFondo) && contraste(fondo, contrasteFondo) >= 1.06) {
+    return mix(fondo, contrasteFondo, 0.45);
+  }
+  return esHex(texto) ? mix(fondo, texto, 0.04) : contrasteFondo;
+}
+
 export function temaDeGrid(leer: LectorDeTokens, cuadricula: Cuadricula = "marcada"): TemaDeGrid {
   const fondo = leer("--gdb-field");
   const texto = leer("--gdb-fg");
@@ -199,7 +213,7 @@ export function temaDeGrid(leer: LectorDeTokens, cuadricula: Cuadricula = "marca
     textDark: leer("--gdb-fg"),
     textMedium: leer("--gdb-fgdim"),
     textLight: leer("--gdb-muted"),
-    textHeader: leer("--gdb-fg"),
+    textHeader: leer("--gdb-fgstrong"),
     // R98: la cabecera de una columna seleccionada se pinta con `accentColor` (el acento), así que su
     // texto es el de «texto sobre acento»; con `fgstrong` en un tema claro quedaba negro sobre azul.
     textHeaderSelected: leer("--gdb-onaccent"),
@@ -221,7 +235,7 @@ export function temaDeGrid(leer: LectorDeTokens, cuadricula: Cuadricula = "marca
     baseFontStyle: "12px",
     headerFontStyle: "600 12px",
     editorFontSize: "12px",
-    cellHorizontalPadding: 8,
-    cellVerticalPadding: 3,
+    cellHorizontalPadding: 10,
+    cellVerticalPadding: 4,
   };
 }

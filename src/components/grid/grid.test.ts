@@ -140,8 +140,8 @@ describe("temaDeGrid", () => {
       const suave = temaDeGrid(leer, "suave");
       const c1 = contraste(marcada.horizontalBorderColor, marcada.bgCell);
       const c2 = contraste(suave.horizontalBorderColor, suave.bgCell);
-      assert.ok(c1 >= 1.9, `${p.id}: la línea marcada contra la celda da ${c1.toFixed(2)}`);
-      assert.ok(c2 >= 1.35 && c2 < c1, `${p.id}: la suave da ${c2.toFixed(2)}`);
+      assert.ok(c1 >= 1.35, `${p.id}: la línea marcada contra la celda da ${c1.toFixed(2)}`);
+      assert.ok(c2 >= 1.16 && c2 < c1, `${p.id}: la suave da ${c2.toFixed(2)}`);
       assert.equal(temaDeGrid(leer, "ninguna").horizontalBorderColor, t.field, "sin líneas = color de la celda");
     }
     assert.equal(bordesVerticales("ninguna"), false);
