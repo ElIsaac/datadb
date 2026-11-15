@@ -128,7 +128,29 @@ export function QueryHistoryContent() {
             </div>
           ) : (
             <ul className="space-y-0.5">
-              {filtered.map((entry) => (
+              {filtered.map((entry) => {
+                const engine = entry.engine ?? session?.type;
+                const database = entry.database ?? session?.database;
+                const engineIcon =
+                  engine === "postgres"
+                    ? "postgres"
+                    : engine === "mysql"
+                      ? "mysql"
+                      : engine === "mongodb"
+                        ? "mongodb"
+                        : "database";
+                const engineColor =
+                  engine === "postgres"
+                    ? "text-gdb-enginepg"
+                    : engine === "mysql"
+                      ? "text-gdb-enginemysql"
+                      : engine === "mongodb"
+                        ? "text-gdb-enginemongo"
+                        : engine === "sqlserver"
+                          ? "text-gdb-enginemssql"
+                          : "text-gdb-fgmuted";
+
+                return (
                 <li
                   key={entry.id}
                   className={cn(
@@ -150,7 +172,13 @@ export function QueryHistoryContent() {
                     <span className="truncate text-xs font-medium font-jetbrains text-foreground">
                       {entry.sql}
                     </span>
-                    <span className="flex items-center gap-3 truncate text-[10px] text-muted-foreground">
+                    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-muted-foreground">
+                      {(engine || database) && (
+                        <span className="flex items-center gap-1 rounded border border-gdb-sep/70 bg-gdb-chrome/60 px-1 py-[0.5px] font-jetbrains text-[9.5px] text-gdb-fg">
+                          <IjIcon name={engineIcon} className={cn("size-3 shrink-0", engineColor)} />
+                          {database && <span className="max-w-[90px] truncate">{database}</span>}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1">
                         <IjIcon name="history" />
                         {formatTime(entry.executedAt)}
@@ -189,7 +217,8 @@ export function QueryHistoryContent() {
                     <IjIcon name="run" />
                   </Button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>

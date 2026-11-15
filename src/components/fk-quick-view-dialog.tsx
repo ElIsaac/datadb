@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -8,10 +9,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { IjIcon } from "@/components/ij-icon";
-import { runQuery as apiRunQuery } from "@/lib/api";
+import { EditableCell } from "@/components/editable-cell";
+import { useAppState } from "@/hooks/use-app-state";
+import { batchEdit, runQuery as apiRunQuery } from "@/lib/api";
 import { quoteIdentifier, quoteValue } from "@/lib/quote";
 import { dialectoSql } from "@/shared/connection-net";
 import {
+  booleanoParaGuardar,
   esColumnaBooleana,
   pintarCelda,
   tokenDeColorPorTipo,
@@ -93,20 +97,45 @@ function FkQuickViewBody({
   onClose: () => void;
   onOpenInTab: (target: FkQuickTarget) => void;
 }) {
+  const { schema } = useAppState();
   const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
   const [rowIndex, setRowIndex] = React.useState(0);
+  const [editingCol, setEditingCol] = React.useState<string | null>(null);
+  const [edits, setEdits] = React.useState<Record<string, unknown>>({});
 
-  React.useEffect(() => {
-    let cancelled = false;
+  const pkColumn = React.useMemo(() => {
+    const node = schema?.find((s) => s.name === target.schema);
+    const table = node?.tables.find((t) => t.name === target.table);
+    const pks = table?.columns.filter((c) => c.isPrimaryKey) ?? [];
+    return pks.length === 1 ? pks[0].name : null;
+  }, [schema, target.schema, target.table]);
+
+  const buildQuerySql = React.useCallback(() => {
     const dialect = dialectoSql(session.type);
     const qualifiedTable = target.schema
       ? `${quoteIdentifier(target.schema, dialect)}.${quoteIdentifier(target.table, dialect)}`
       : quoteIdentifier(target.table, dialect);
-    const sql = `SELECT * FROM ${qualifiedTable} WHERE ${quoteIdentifier(target.column, dialect)} = ${quoteValue(target.value)}`;
+    return `SELECT * FROM ${qualifiedTable} WHERE ${quoteIdentifier(target.column, dialect)} = ${quoteValue(target.value)}`;
+  }, [session.type, target.schema, target.table, target.column, target.value]);
 
-    apiRunQuery(session.sessionId, sql)
+  const cargar = React.useCallback(async () => {
+    try {
+      const res = await apiRunQuery(session.sessionId, buildQuerySql());
+      setResult(res);
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [session.sessionId, buildQuerySql]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    apiRunQuery(session.sessionId, buildQuerySql())
       .then((res) => {
         if (!cancelled) {
           setResult(res);
@@ -119,15 +148,51 @@ function FkQuickViewBody({
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [target, session]);
+  }, [session.sessionId, buildQuerySql]);
 
   const rows = result?.rows ?? [];
   const currentRow = rows[rowIndex];
   const columns = result?.columns ?? [];
+  const pkValue = pkColumn && currentRow ? currentRow[pkColumn] : undefined;
+  const canEdit = Boolean(pkColumn && currentRow && pkValue !== undefined && pkValue !== null);
+  const editCount = Object.keys(edits).length;
+
+  function setColEdit(colName: string, nextVal: unknown) {
+    if (!currentRow) return;
+    const orig = currentRow[colName];
+    setEdits((prev) => {
+      if (Object.is(orig, nextVal)) {
+        const copy = { ...prev };
+        delete copy[colName];
+        return copy;
+      }
+      return { ...prev, [colName]: nextVal };
+    });
+  }
+
+  async function handleSaveEdits() {
+    if (!canEdit || !pkColumn || editCount === 0) return;
+    setSaving(true);
+    try {
+      await batchEdit(session.sessionId, {
+        schema: target.schema || undefined,
+        table: target.table,
+        pkColumn,
+        operations: [{ type: "update", pkValue, changes: edits }],
+      });
+      setEdits({});
+      setEditingCol(null);
+      await cargar();
+      toast.success("Cambios guardados");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <DialogContent className="flex max-h-[80vh] max-w-xl flex-col gap-0 overflow-hidden border-gdb-sep bg-gdb-chrome p-0 text-gdb-fg">
@@ -172,13 +237,27 @@ function FkQuickViewBody({
           <div className="divide-y divide-gdb-sep/50">
             {columns.map((col, idx) => {
               const isMatchedKey = col.name === target.column;
+              const isPk = col.name === pkColumn;
+              const colEditable = canEdit && !isPk;
+              const hasEdit = Object.prototype.hasOwnProperty.call(edits, col.name);
+              const val = hasEdit ? edits[col.name] : currentRow[col.name];
+              const colType = col.type ?? "";
+              const boolVal =
+                typeof val === "boolean"
+                  ? val
+                  : esColumnaBooleana(colType)
+                    ? valorBooleano(val)
+                    : null;
+              const isEditingThis = editingCol === col.name;
+
               return (
                 <div
                   key={col.name}
                   className={cn(
-                    "grid grid-cols-[minmax(140px,38%)_minmax(0,1fr)] items-baseline gap-3 px-4 py-1.5 text-xs",
-                    idx % 2 === 1 && "bg-gdb-chrome/35",
-                    isMatchedKey && "bg-gdb-accent/10"
+                    "grid grid-cols-[minmax(150px,40%)_minmax(0,1fr)] items-center gap-3 px-4 py-1.5 text-xs",
+                    idx % 2 === 1 && !hasEdit && "bg-gdb-chrome/35",
+                    isMatchedKey && !hasEdit && "bg-gdb-accent/10",
+                    hasEdit && "bg-gdb-diffmod/40"
                   )}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2 font-jetbrains text-[11.5px] text-gdb-fgdim">
@@ -197,7 +276,47 @@ function FkQuickViewBody({
                     )}
                   </div>
                   <div className="min-w-0">
-                    {formatCellPreview(currentRow[col.name], col.type ?? "")}
+                    {isEditingThis ? (
+                      <EditableCell
+                        enLinea
+                        value={val}
+                        columnType={col.type}
+                        onCommit={(nuevo) => {
+                          setColEdit(col.name, nuevo);
+                          setEditingCol(null);
+                        }}
+                        onCancel={() => setEditingCol(null)}
+                      />
+                    ) : colEditable && boolVal !== null ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setColEdit(col.name, booleanoParaGuardar(currentRow[col.name], !boolVal))
+                        }
+                        title="Clic para alternar true/false"
+                        className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gdb-accent"
+                      >
+                        {formatCellPreview(val, colType)}
+                      </button>
+                    ) : colEditable ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setEditingCol(col.name)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "F2") {
+                            e.preventDefault();
+                            setEditingCol(col.name);
+                          }
+                        }}
+                        title="Clic para editar valor"
+                        className="cursor-text rounded px-1 py-0.5 hover:bg-gdb-rowhover"
+                      >
+                        {formatCellPreview(val, colType)}
+                      </div>
+                    ) : (
+                      formatCellPreview(val, colType)
+                    )}
                   </div>
                 </div>
               );
@@ -214,7 +333,11 @@ function FkQuickViewBody({
                 size="xs"
                 variant="outline"
                 disabled={rowIndex <= 0}
-                onClick={() => setRowIndex((i) => Math.max(0, i - 1))}
+                onClick={() => {
+                  setEdits({});
+                  setEditingCol(null);
+                  setRowIndex((i) => Math.max(0, i - 1));
+                }}
                 className="border-gdb-sep"
               >
                 ◀
@@ -226,7 +349,11 @@ function FkQuickViewBody({
                 size="xs"
                 variant="outline"
                 disabled={rowIndex >= rows.length - 1}
-                onClick={() => setRowIndex((i) => Math.min(rows.length - 1, i + 1))}
+                onClick={() => {
+                  setEdits({});
+                  setEditingCol(null);
+                  setRowIndex((i) => Math.min(rows.length - 1, i + 1));
+                }}
                 className="border-gdb-sep"
               >
                 ▶
@@ -235,16 +362,41 @@ function FkQuickViewBody({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {editCount > 0 && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={saving}
+                onClick={() => {
+                  setEdits({});
+                  setEditingCol(null);
+                }}
+                className="h-7 text-xs text-gdb-dangerfg hover:bg-gdb-dangerbg"
+              >
+                Descartar
+              </Button>
+              <Button
+                size="sm"
+                disabled={saving}
+                onClick={() => void handleSaveEdits()}
+                className="h-7 gap-1 text-xs"
+              >
+                {saving ? "Guardando…" : `Guardar (${editCount})`}
+              </Button>
+            </>
+          )}
           <Button size="sm" variant="ghost" onClick={onClose} className="h-7 text-xs">
             Cerrar
           </Button>
           <Button
             size="sm"
+            variant="outline"
             onClick={() => {
               onOpenInTab(target);
               onClose();
             }}
-            className="h-7 gap-1.5 text-xs"
+            className="h-7 gap-1.5 border-gdb-sep text-xs"
           >
             <IjIcon name="table" />
             Abrir en pestaña

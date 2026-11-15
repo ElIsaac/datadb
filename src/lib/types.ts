@@ -180,6 +180,8 @@ export interface QueryHistoryEntry {
   rowCount?: number;
   affectedRows?: number;
   error?: string;
+  database?: string;
+  engine?: Session["type"];
 }
 
 export interface FavoriteTable {

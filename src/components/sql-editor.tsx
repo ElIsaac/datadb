@@ -289,6 +289,8 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
             durationMs: res.durationMs,
             rowCount: res.rowCount,
             affectedRows: res.affectedRows,
+            database: sessionRef.current?.database,
+            engine: sessionRef.current?.type,
           };
           dispatch({ type: "ADD_QUERY_HISTORY_ENTRY", payload: historyEntry });
 
