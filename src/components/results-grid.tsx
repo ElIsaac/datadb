@@ -720,7 +720,7 @@ export const ResultsGrid = React.memo(function ResultsGrid({
 
   return (
     <div ref={rejillaRef} data-testid={TESTID_REJILLA} className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b bg-muted/30 px-2 py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-gdb-sep bg-gdb-th px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {/* Con filtro puesto, el contador dice cuántas de cuántas se ven: sin eso, «500 filas»
               cuando la rejilla enseña 3 es una contradicción a la vista. */}
@@ -985,7 +985,7 @@ export const ResultsGrid = React.memo(function ResultsGrid({
         tableContext={tableContext}
       />
 
-        <div className="relative flex-1 overflow-hidden rounded-lg border border-border">
+        <div className="relative flex-1 overflow-hidden bg-gdb-editor">
           <DataGrid
             columnas={result.columns}
             /*

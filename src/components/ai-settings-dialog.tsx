@@ -94,7 +94,7 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
   if (!settings) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[min(94vw,42rem)] border-border/60 bg-popover p-0 text-foreground max-h-[90vh] overflow-y-auto sm:max-w-[min(94vw,42rem)]">
+        <DialogContent className="max-w-[min(94vw,42rem)] border-gdb-sep bg-gdb-chrome p-0 text-foreground max-h-[90vh] overflow-y-auto sm:max-w-[min(94vw,42rem)]">
           <div className="flex items-center gap-3 border-b border-border/60 p-5">
             <span className="flex size-9 items-center justify-center rounded-xl border border-border/60 bg-muted/40">
               <SparklesIcon className="size-4 text-primary" />
@@ -165,10 +165,10 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
         data-model-id={model.id}
         onClick={() => setModel(model.id)}
         className={cn(
-          "group flex w-full items-center gap-4 px-4 py-3 text-left text-xs transition-colors border-b border-outline-variant/10",
+          "group flex w-full items-center gap-4 px-4 py-3 text-left text-xs transition-colors border-b border-gdb-sep",
           isActive
-            ? "border-l-2 border-l-primary bg-surface-container-high/20"
-            : "border-l-2 border-l-transparent hover:bg-surface-container-highest/40"
+            ? "border-l-2 border-l-gdb-accent bg-gdb-listsel"
+            : "border-l-2 border-l-transparent hover:bg-gdb-rowhover"
         )}
       >
         <span
@@ -232,7 +232,7 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex max-h-[85vh] max-w-[min(94vw,56rem)] flex-col overflow-hidden border-border/60 bg-popover p-0 text-foreground sm:max-w-[min(94vw,56rem)]"
+        className="flex max-h-[85vh] max-w-[min(94vw,56rem)] flex-col overflow-hidden border-gdb-sep bg-gdb-chrome p-0 text-foreground sm:max-w-[min(94vw,56rem)]"
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 p-5">
           <div className="flex items-center gap-3">

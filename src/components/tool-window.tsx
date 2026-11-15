@@ -237,13 +237,13 @@ export function ToolWindowOverlay({
         // en New UI Light no se distinguía de un panel acoplado). Negro con alfa, como las sombras de Tailwind: no es
         // un color de tema (el test de colores fijos solo prohíbe hex y clases de paleta).
         "absolute z-40 flex flex-col overflow-hidden bg-card",
-        dock === "left" && "inset-y-0 left-0 w-[min(380px,45%)] border-r border-gdb-contrast shadow-[8px_0_24px_-4px_rgb(0_0_0/0.35)]",
-        dock === "right" && "inset-y-0 right-0 w-[min(380px,45%)] border-l border-gdb-contrast shadow-[-8px_0_24px_-4px_rgb(0_0_0/0.35)]",
-        dock === "bottom" && "inset-x-0 bottom-0 h-[45%] border-t border-gdb-contrast shadow-[0_-8px_24px_-4px_rgb(0_0_0/0.35)]"
+        dock === "left" && "inset-y-0 left-0 w-[min(380px,45%)] border-r border-gdb-sep shadow-[8px_0_24px_-4px_rgb(0_0_0/0.35)]",
+        dock === "right" && "inset-y-0 right-0 w-[min(380px,45%)] border-l border-gdb-sep shadow-[-8px_0_24px_-4px_rgb(0_0_0/0.35)]",
+        dock === "bottom" && "inset-x-0 bottom-0 h-[45%] border-t border-gdb-sep shadow-[0_-8px_24px_-4px_rgb(0_0_0/0.35)]"
       )}
     >
       <ToolWindowContextMenu id={id}>
-        <div className="flex h-[var(--gdb-tab-h)] shrink-0 items-stretch border-b border-border/60 bg-gdb-twactive">
+        <div className="flex h-8 shrink-0 items-stretch border-b border-gdb-sep bg-gdb-twactive">
           <div className="flex items-center gap-1.5 px-2.5 text-xs text-gdb-fgstrong">
             <IjIcon name={meta.icon} />
             <span className="truncate">{meta.label}</span>

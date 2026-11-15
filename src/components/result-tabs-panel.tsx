@@ -114,16 +114,16 @@ export function ResultTabsPanel({
         </div>
       </div>
       {!unico && (
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b bg-background px-1.5">
+      <div className="flex h-8 shrink-0 items-center gap-1 border-b border-gdb-sep bg-gdb-chrome px-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {console_.resultTabs.map((tab) => (
             <button
               key={tab.id}
               className={cn(
-                "group flex h-6 max-w-[160px] items-center gap-1.5 rounded-full px-2.5 text-xs transition-colors",
+                "group flex h-6 max-w-[160px] items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors",
                 activeTab?.id === tab.id
-                  ? "bg-card font-medium text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted/60"
+                  ? "bg-gdb-contrast font-medium text-gdb-fgstrong"
+                  : "text-gdb-fgdim hover:bg-gdb-rowhover hover:text-gdb-fg"
               )}
               onClick={() =>
                 dispatch({ type: "SET_ACTIVE_RESULT_TAB", payload: tab.id })
@@ -148,7 +148,7 @@ export function ResultTabsPanel({
       {!minimized && (
         <div className="min-h-0 flex-1">
           {activeTab ? (
-            <div className="h-full p-2">
+            <div className="h-full">
               {activeTab.explainTree ? (
                 <ExplainTab tree={activeTab.explainTree} sql={activeTab.sql} />
               ) : (

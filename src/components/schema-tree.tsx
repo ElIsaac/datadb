@@ -235,7 +235,7 @@ export function SchemaTree() {
         Tablas/Especiales y sin tarjetas. Arriba solo el buscador de objetos; debajo el árbol con
         los grupos contados.
       */}
-      <div className="flex flex-col gap-2 border-b border-border/60 px-2 py-2">
+      <div className="flex flex-col gap-1.5 border-b border-gdb-sep px-2 py-2">
         <div className="relative">
           <IjIcon name="search" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2" />
           <Input
@@ -278,7 +278,7 @@ export function SchemaTree() {
       </div>
 
       <ScrollArea className="flex-1 bg-transparent">
-        <div className="p-3">
+        <div className="p-1.5">
           {filteredSchemas.map((node) => {
             const isOpen = expandedSchemas.has(node.name);
             return (

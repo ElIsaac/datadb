@@ -27,7 +27,7 @@ export function StatusBar() {
   }, [settings]);
 
   return (
-    <div className="flex h-7 shrink-0 items-center justify-between border-t bg-muted/50 px-3 text-[11px] text-muted-foreground">
+    <div className="flex h-6 shrink-0 items-center justify-between border-t border-gdb-sep bg-gdb-chrome px-3 text-[11px] text-gdb-fgdim">
       <div className="flex items-center gap-3">
         {conexion ? (
           <>

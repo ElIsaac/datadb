@@ -27,7 +27,7 @@ export function ToolWindowBar({ variant }: { variant: "side" | "header" }) {
         "flex shrink-0 select-none",
         variant === "side"
           ? // 40 px: los 32 del botón + 4 de aire a cada lado (concepto, #bar)
-            "w-10 flex-col items-center gap-0.5 border-r border-gdb-contrast bg-gdb-chrome py-1.5"
+            "w-10 flex-col items-center gap-0.5 border-r border-gdb-sep bg-gdb-chrome py-1.5"
           : "items-center gap-0.5"
       )}
     >

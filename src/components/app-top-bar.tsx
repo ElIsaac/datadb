@@ -27,7 +27,6 @@
 import * as React from "react";
 
 import { IjIcon } from "@/components/ij-icon";
-import { esMotorSql } from "@/shared/connection-net";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -78,15 +77,12 @@ function PuntoDeConexion({ color }: { color: string }) {
 export function AppTopBar({
   onOpenConnections,
   onOpenAppearance,
-  txMode,
   children,
 }: {
   /** Abre el modal «Conexiones» (T1). */
   onOpenConnections: () => void;
   /** Abre el diálogo de apariencia (tema/densidad/paleta). */
   onOpenAppearance: () => void;
-  /** Modo de transacción de la consola activa (vive como `useState` en `app-shell`). */
-  txMode: "auto" | "manual";
   /** Los stripes de tool windows (los mismos que hoy viven en el header viejo). */
   children?: React.ReactNode;
 }) {
@@ -155,11 +151,9 @@ export function AppTopBar({
     }
   }
 
-  const running = state.running;
-
   return (
     <header
-      className="flex h-10 shrink-0 items-center gap-2 border-b border-gdb-contrast bg-gdb-chrome px-3 text-xs text-gdb-fg [-webkit-app-region:drag]"
+      className="flex h-10 shrink-0 items-center gap-2 border-b border-gdb-sep bg-gdb-chrome px-3 text-xs text-gdb-fg [-webkit-app-region:drag]"
       data-testid="app-top-bar"
     >
       {/* Franja de los semáforos de macOS (titleBarStyle hiddenInset): la pinta encima el SO. */}
@@ -197,7 +191,7 @@ export function AppTopBar({
                     ? `${conexion.name}: se conecta al ejecutar (cambiar, desconectar)`
                     : "Conexión de la consola activa (cambiar, desconectar)"
                 }
-                className="h-7 max-w-[220px] gap-1.5 border-gdb-border bg-transparent px-2 font-medium text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+                className="h-7 max-w-[220px] gap-1.5 rounded-md border-gdb-sep bg-gdb-editor/50 px-2.5 font-medium text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
               >
                 {conexion ? (
                   <>
@@ -314,120 +308,27 @@ export function AppTopBar({
         )}
       </div>
 
-      {/* --- 3. Acciones de consola (los MISMOS eventos del menú/paleta) ---------- */}
-      {/*
-        Fase 80: con MongoDB la consola no es SQL, así que Ejecutar/EXPLAIN/Formatear/Tx no
-        significan nada. Se ocultan en vez de dejarlos ahí para que fallen al pulsarlos.
-      */}
-      {esMotorSql(conexion?.type) && (
-      <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
-        {running ? (
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => emitir("gestordb:cancel-query")}
-            title="Cancelar la consulta en curso"
-            className="h-7 gap-1.5 px-2.5"
-          >
-            <IjIcon name="stop" />
-            Cancelar
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            onClick={() => emitir("gestordb:execute")}
-            disabled={!conexion}
-            title="Ejecutar (Cmd/Ctrl+↩)"
-            className="h-7 gap-1.5 bg-primary px-2.5 text-primary-foreground hover:bg-primary/90"
-          >
-            <IjIcon name="run" />
-            Ejecutar
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => emitir("gestordb:execute-all")}
-          disabled={!conexion || running}
-          title="Ejecutar todo el documento (Cmd/Ctrl+⇧+↩)"
-          className="h-7 gap-1.5 border-gdb-border bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-        >
-          <IjIcon name="runAll" />
-          Todo
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => emitir("gestordb:explain-plan")}
-          disabled={!conexion || running}
-          title="Ver plan de ejecución (Cmd/Ctrl+⇧+J)"
-          className="h-7 gap-1.5 border-gdb-border bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-        >
-          <IjIcon name="explainPlan" />
-          EXPLAIN
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => emitir("gestordb:format-sql")}
-          title="Formatear consulta (Cmd/Ctrl+⇧+F)"
-          className="h-7 gap-1.5 border-gdb-border bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-        >
-          <IjIcon name="reformatCode" />
-          Formatear
-        </Button>
-        {/* Tx: auto/manual — desplegable con chevron (no chip que cicla: criterio del usuario). */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                size="sm"
-                variant="outline"
-                title="Modo de transacción"
-                className="h-7 gap-1.5 border-gdb-border bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-              >
-                <span className="font-medium">Tx</span>
-                <span className="text-gdb-fgdim">{state.transactionActive ? "manual" : txModeLabel(txMode)}</span>
-                <IjIcon name="chevronDown" className="opacity-60" />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem onClick={() => emitir("gestordb:tx-auto")} className="gap-2">
-              <span className="size-2.5 rounded-full bg-gdb-live" />
-              Auto commit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => emitir("gestordb:tx-manual")} className="gap-2">
-              <span className="size-2.5 rounded-full bg-gdb-warn" />
-              Manual (transacción abierta)
-            </DropdownMenuItem>
-            {state.transactionActive && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => emitir("gestordb:commit")} className="gap-2">
-                  <IjIcon name="commit" />
-                  Commit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => emitir("gestordb:rollback")} className="gap-2">
-                  <IjIcon name="revert" />
-                  Rollback
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      )}
-
-      {/* --- 4. Derecha: Conexiones…, +, ajustes, IA ------------------------------ */}
-      <div className="ml-auto flex items-center gap-1 [-webkit-app-region:no-drag]">
+      {/* --- 3. Derecha: Command Palette, Conexiones…, +, ajustes, IA ----------- */}
+      <div className="ml-auto flex items-center gap-1.5 [-webkit-app-region:no-drag]">
         {children}
+        <span aria-hidden className="mx-0.5 h-4 w-px bg-gdb-sep" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => emitir("gestordb:command-palette")}
+          title="Paleta de comandos (⌘K)"
+          className="h-7 gap-1.5 border-gdb-sep bg-gdb-editor/50 px-2.5 text-gdb-fgdim hover:bg-gdb-hover hover:text-gdb-fgstrong"
+        >
+          <IjIcon name="search" />
+          <span className="hidden sm:inline">Comandos</span>
+          <kbd className="rounded bg-gdb-contrast px-1 font-jetbrains text-[10px] text-gdb-muted">⌘K</kbd>
+        </Button>
         <Button
           size="sm"
           variant="outline"
           onClick={onOpenConnections}
           title="Gestionar conexiones"
-          className="h-7 gap-1.5 border-gdb-border bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
         >
           <IjIcon name="connect" />
           Conexiones…
@@ -435,37 +336,13 @@ export function AppTopBar({
         <Button
           size="icon-sm"
           variant="outline"
-          onClick={() => emitir("gestordb:new-console")}
-          title="Nueva consola SQL (Cmd/Ctrl+T)"
-          className="border-gdb-border bg-transparent text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-        >
-          <IjIcon name="add" />
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="outline"
           onClick={onOpenAppearance}
           title="Apariencia: tema, densidad y paleta"
-          className="border-gdb-border bg-transparent text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          className="border-gdb-sep bg-transparent text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
         >
           <IjIcon name="palette" />
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="outline"
-          onClick={() => emitir("gestordb:ai-sql")}
-          disabled={session === null || state.aiSettings?.enabled === false}
-          title="Asistente IA: Generar SQL… (Cmd/Ctrl+⇧+Y)"
-          className="border-gdb-border bg-transparent text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
-        >
-          <IjIcon name="ai" />
         </Button>
       </div>
     </header>
   );
-}
-
-/** Etiqueta del modo de transacción para el desplegable (no memoiza: es un literal). */
-function txModeLabel(mode: "auto" | "manual"): string {
-  return mode;
 }

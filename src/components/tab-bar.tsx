@@ -51,10 +51,7 @@ export function TabBar() {
   const isSqlActive = state.activeTabId === "sql";
 
   return (
-    <div className="flex h-[var(--gdb-tab-h)] shrink-0 items-stretch overflow-x-auto border-b bg-gdb-tabsbg scrollbar-thin">
-      {/* R10 (fase 7, T7): tira a la altura del tema (--gdb-tab-h: 40 New UI / 32 clásica) y pestañas al estilo
-          JetBrains: toda la altura, sin redondeo, subrayado de 3 px con el acento. Antes: tira de 36 px con
-          "píldoras" de 28 px. */}
+    <div className="flex h-[var(--gdb-tab-h)] shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-gdb-sep bg-gdb-tabsbg px-2 scrollbar-thin">
       {state.consoles.map((console_) => {
         const isCurrentConsole = console_.id === state.activeConsoleId;
         const isViewing = isSqlActive && isCurrentConsole;
@@ -63,18 +60,18 @@ export function TabBar() {
           <Tooltip key={console_.id}>
             <TooltipTrigger
               className={cn(
-                "group relative flex h-full shrink-0 max-w-[200px] items-center gap-1.5 px-3 text-xs",
+                "group relative mt-1 flex shrink-0 max-w-[200px] items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 text-xs transition-colors",
                 isViewing
-                  ? "bg-gdb-tabactive font-medium text-foreground"
+                  ? "border-gdb-sep bg-gdb-editor font-medium text-gdb-fgstrong"
                   : isCurrentConsole
-                    ? "font-medium text-foreground hover:bg-muted"
-                    : "text-muted-foreground hover:bg-muted"
+                    ? "border-gdb-sep/50 bg-gdb-tabactive/60 font-medium text-gdb-fg hover:bg-gdb-rowhover"
+                    : "border-transparent text-gdb-fgdim hover:bg-gdb-rowhover hover:text-gdb-fg"
               )}
               onClick={() => handleSelectConsole(console_.id)}
               onDoubleClick={(e) => startRename(e, console_.id, console_.name)}
             >
               {isCurrentConsole && (
-                <span className="absolute inset-x-0 bottom-0 h-[3px] bg-gdb-accent" />
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gdb-accent" />
               )}
               {/*
                 Punto de color de la conexión de ESTA consola (multi-conexión):
@@ -164,7 +161,7 @@ export function TabBar() {
         <TooltipContent>Nueva consola SQL</TooltipContent>
       </Tooltip>
 
-      {state.tableTabs.length > 0 && <div className="mx-1 h-5 w-px shrink-0 self-center bg-border" />}
+      {state.tableTabs.length > 0 && <div className="mx-1 h-4 w-px shrink-0 self-center bg-gdb-sep" />}
 
       {state.tableTabs.map((tab) => {
         const isLog = tab.kind === "sqlLog"; // fase 3 (T7)
@@ -183,10 +180,10 @@ export function TabBar() {
           <Tooltip key={tab.id}>
             <TooltipTrigger
               className={cn(
-                "group relative flex h-full shrink-0 max-w-[200px] items-center gap-1.5 px-3 text-xs",
+                "group relative mt-1 flex shrink-0 max-w-[200px] items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 text-xs transition-colors",
                 isActive
-                  ? "bg-gdb-tabactive font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-gdb-accent"
-                  : "text-muted-foreground hover:bg-muted"
+                  ? "border-gdb-sep bg-gdb-editor font-medium text-gdb-fgstrong after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:bg-gdb-accent"
+                  : "border-transparent text-gdb-fgdim hover:bg-gdb-rowhover hover:text-gdb-fg"
               )}
               onClick={() => dispatch({ type: "SET_ACTIVE_TAB", payload: tab.id })}
             >

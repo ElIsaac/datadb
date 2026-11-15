@@ -21,6 +21,9 @@ import { adaptadorDeConsolaProxy, type ConsolaView } from "@/components/own-edit
 import { contextualSuggestions } from "@/lib/sql-completion";
 import type { QueryHistoryEntry, QueryResult, SavedQuery, Session, TableContext, TableMeta } from "@/lib/types";
 import { wakeBinding } from "@/lib/console-wake";
+import { IjIcon } from "@/components/ij-icon";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { connectionOf } from "@/lib/console-binding";
 
 const RUN_QUERY_EVENT = "cm-run-query";
@@ -53,7 +56,7 @@ function getTableReferenceAtCursor(
   return { schema, table };
 }
 
-export function SqlEditor() {
+export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
   const state = useAppState();
   /*
     R92 — columnas con su propio color. El lexer del editor (`highlight.ts`) no conoce el esquema: se
@@ -78,6 +81,7 @@ export function SqlEditor() {
   // Sesión de la consola con foco: el editor ejecuta/explica/convierte SIEMPRE
   // sobre la conexión de su propia consola, nunca sobre una sesión global.
   const session = console_.session;
+  const conexion = connectionOf(console_);
   /**
    * Ya NO hay dos motores: la consola siempre monta el editor propio (decisión del usuario,
    * 2026-10-20: «quedémonos con el editor y quitemos CodeMirror»). `cmRef` conserva la forma
@@ -947,13 +951,159 @@ export function SqlEditor() {
         header global. Muestra el estado "sin conectar" con su propio flujo de
         conexión cuando la consola aún no tiene sesión.
       */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background p-3">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          Consola SQL
+      {/*
+        Barra contextual del editor SQL (estilo OpenDesign): las acciones de ejecución y formato
+        viven junto al editor donde el usuario escribe sus consultas.
+      */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-gdb-sep bg-gdb-chrome px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {state.running ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => void handleCancelQuery()}
+              title="Cancelar la consulta en curso"
+              className="h-7 gap-1.5 px-2.5"
+            >
+              <IjIcon name="stop" />
+              Cancelar
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => void handleRun("active")}
+              disabled={!conexion}
+              title="Ejecutar sentencia actual (Cmd/Ctrl+↩)"
+              className="h-7 gap-1.5 bg-primary px-2.5 text-primary-foreground hover:bg-primary/90"
+            >
+              <IjIcon name="run" />
+              Ejecutar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleRun("all")}
+            disabled={!conexion || state.running}
+            title="Ejecutar todo el documento (Cmd/Ctrl+⇧+↩)"
+            className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          >
+            <IjIcon name="runAll" />
+            Todo
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleExplain()}
+            disabled={!conexion || state.running}
+            title="Ver plan de ejecución (Cmd/Ctrl+⇧+J)"
+            className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          >
+            <IjIcon name="explainPlan" />
+            EXPLAIN
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleFormatSql}
+            title="Formatear consulta (Cmd/Ctrl+⇧+F)"
+            className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          >
+            <IjIcon name="reformatCode" />
+            Formatear
+          </Button>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const txActiva = state.transactionActive || txMode === "manual";
+              return (
+                <>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={txActiva}
+                    disabled={!session}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent(txActiva ? "gestordb:tx-auto" : "gestordb:tx-manual")
+                      )
+                    }
+                    title={
+                      state.transactionActive
+                        ? "Transacción activa (manual) — haz Commit o Rollback para finalizar"
+                        : "Activar modo transacción manual (BEGIN)"
+                    }
+                    className={cn(
+                      "inline-flex h-7 items-center gap-2 rounded-md border px-2 text-xs transition-colors disabled:pointer-events-none disabled:opacity-45",
+                      state.transactionActive
+                        ? "border-gdb-warn/60 bg-gdb-warnbg text-gdb-warnfg"
+                        : "border-gdb-sep bg-transparent text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full border transition-colors",
+                        state.transactionActive
+                          ? "border-gdb-warn bg-gdb-warn"
+                          : "border-gdb-borderstrong bg-gdb-contrast"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-block size-2.5 rounded-full bg-gdb-onaccent shadow-xs transition-transform",
+                          txActiva ? "translate-x-2.5" : "translate-x-0.5"
+                        )}
+                      />
+                    </span>
+                    <span className="font-medium">Tx</span>
+                    <span className="flex items-center gap-1 text-[11px]">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          state.transactionActive ? "bg-gdb-warn" : "bg-gdb-live"
+                        )}
+                      />
+                      {state.transactionActive ? "Activa" : "Auto"}
+                    </span>
+                  </button>
+
+                  {state.transactionActive && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.dispatchEvent(new CustomEvent("gestordb:commit"))}
+                        disabled={!session || state.running}
+                        title="Confirmar transacción (COMMIT)"
+                        className="h-7 gap-1 border-gdb-okfg/40 bg-gdb-okbg px-2 text-gdb-okfg hover:bg-gdb-okbg/80"
+                      >
+                        <IjIcon name="commit" />
+                        Commit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.dispatchEvent(new CustomEvent("gestordb:rollback"))}
+                        disabled={!session || state.running}
+                        title="Revertir transacción (ROLLBACK)"
+                        className="h-7 gap-1 border-gdb-dangerborder bg-gdb-dangerbg px-2 text-gdb-dangerfg hover:bg-gdb-dangerbg/80"
+                      >
+                        <IjIcon name="revert" />
+                        Rollback
+                      </Button>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
           {console_.activeSavedQueryId && (
-            <>
-              <span className="text-muted-foreground/50">·</span>
-              <span className="max-w-[220px] truncate text-foreground">
+            <div className="mr-1 flex items-center gap-1.5 text-xs text-gdb-fgdim">
+              <span className="max-w-[200px] truncate text-gdb-fg">
                 {state.savedQueries.find((q) => q.id === console_.activeSavedQueryId)
                   ?.name ?? "Consulta guardada"}
               </span>
@@ -963,18 +1113,39 @@ export function SqlEditor() {
                   title="Cambios sin guardar (Cmd/Ctrl+S para guardar)"
                 />
               )}
-            </>
+            </div>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleSaveQuery()}
+            title="Guardar consulta (Cmd/Ctrl+S)"
+            className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          >
+            <IjIcon name="save" />
+            Guardar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleOpenAiSql}
+            disabled={session === null || state.aiSettings?.enabled === false}
+            title="Asistente IA: Generar SQL… (Cmd/Ctrl+⇧+Y)"
+            className="h-7 gap-1.5 border-gdb-sep bg-transparent px-2.5 text-gdb-fg hover:bg-gdb-hover hover:text-gdb-fgstrong"
+          >
+            <IjIcon name="ai" />
+            IA SQL
+          </Button>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <div className="flex min-h-0 flex-1 flex-col">
       {/*
         El contenedor del editor es `flex-1 min-h-0`: ocupa TODO el alto que le deja el panel y se
         encoge al arrastrar el separador de resultados o al minimizarlos. Antes llevaba
         `min-h-[200px]` y la columna tenía `overflow-y-auto`, así que el editor crecía con el texto
         y el panel grande quedaba vacío (el scroll lo tenía la columna, no el editor).
       */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gdb-editor">
         <OwnEditor
             key={`own-${console_.id}`}
             ref={ownRef}
