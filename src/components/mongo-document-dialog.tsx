@@ -77,7 +77,7 @@ export function MongoDocumentDialog({
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="border-gdb-sep bg-gdb-chrome sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{TITULO[modo]}</DialogTitle>
           <DialogDescription className="text-[11px]">{AYUDA[modo]}</DialogDescription>
@@ -99,7 +99,7 @@ export function MongoDocumentDialog({
           aria-label="Documento en JSON"
           spellCheck={false}
           rows={14}
-          className="w-full resize-y rounded-md border border-gdb-border bg-gdb-field p-2 font-jetbrains text-[11px] leading-[1.5] text-gdb-fg outline-none focus-visible:border-gdb-accent"
+          className="w-full resize-y rounded-md border border-gdb-sep bg-gdb-editor p-3 font-jetbrains text-[11px] leading-[1.5] text-gdb-fg outline-none focus-visible:border-gdb-accent"
         />
 
         {(error ?? errorServidor) && (

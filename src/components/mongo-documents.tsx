@@ -67,6 +67,35 @@ const CLASE_TIPO: Record<TipoDeValor, string> = {
   array: "text-gdb-fg",
 };
 
+function etiquetaDeTipo(tipo: TipoDeValor, valor: unknown): string {
+  switch (tipo) {
+    case "objectid":
+      return "ObjectId";
+    case "string":
+      return "String";
+    case "number":
+      return typeof valor === "number" && Number.isInteger(valor) ? "Int32" : "Double";
+    case "long":
+      return "Int64";
+    case "decimal":
+      return "Decimal128";
+    case "boolean":
+      return "Boolean";
+    case "date":
+      return "Date";
+    case "null":
+      return "Null";
+    case "binary":
+      return "Binary";
+    case "regex":
+      return "RegExp";
+    case "array":
+      return Array.isArray(valor) ? `Array(${valor.length})` : "Array";
+    case "object":
+      return "Document";
+  }
+}
+
 const TAMANOS_DE_PAGINA = [25, 50, 100];
 
 /**
@@ -182,15 +211,32 @@ function FilaDeCampo({
               <span className="shrink-0 text-[10px] text-gdb-fgmuted">escribe un texto y quedará como cadena</span>
             )}
           </span>
+        ) : tipo === "boolean" ? (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2 py-[1px] font-jetbrains text-[10.5px] font-semibold",
+              valor ? "bg-gdb-okbg text-gdb-okfg" : "bg-gdb-dangerbg text-gdb-dangerfg"
+            )}
+          >
+            {valor ? "true" : "false"}
+          </span>
+        ) : tipo === "null" ? (
+          <span className="inline-block rounded bg-gdb-contrast/70 px-1.5 py-[1px] font-jetbrains text-[10.5px] italic text-gdb-fgmuted">
+            null
+          </span>
         ) : (
           <span
             className={cn(
               "min-w-0 break-all font-jetbrains text-[11px]",
-              CLASE_TIPO[tipo],
-              tipo === "null" && "italic"
+              CLASE_TIPO[tipo]
             )}
           >
             {textoDeValor(valor)}
+          </span>
+        )}
+        {!editando && (
+          <span className="ml-auto shrink-0 rounded border border-gdb-sep/70 px-1 font-jetbrains text-[10px] text-gdb-fgmuted">
+            {etiquetaDeTipo(tipo, valor)}
           </span>
         )}
       </div>
@@ -226,7 +272,7 @@ function TarjetaDeDocumento({
   /** Documento tal como está en el servidor (para el diff y el «antes»). */
   original: Record<string, unknown>;
   indice: number;
-  vista: "lista" | "json";
+  vista: "lista" | "json" | "tabla";
   editable: boolean;
   guardando: boolean;
   error: string | null;
@@ -242,18 +288,26 @@ function TarjetaDeDocumento({
   const nCambios = Object.keys(cambios).length;
 
   return (
-    <div className="group rounded-md border border-gdb-border bg-editor">
+    <div className="group overflow-hidden rounded-md border border-gdb-sep bg-gdb-chrome">
       {/*
         Cabecera: chip con el número, la cuenta de cambios y —solo cuando hay cambios— Revertir y
         Guardar. Decisión del usuario (2026-10-21): los botones viven aquí, junto al número.
       */}
-      <div className="flex items-center justify-between gap-2 border-b border-gdb-border/60 bg-gdb-chrome/30 px-2 py-[3px]">
+      <div className="flex items-center justify-between gap-2 border-b border-gdb-sep bg-gdb-th px-3 py-1">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className="rounded border border-gdb-border/70 bg-gdb-chrome px-1.5 py-[1px] font-jetbrains text-[10px] font-medium tabular-nums text-gdb-fgstrong"
             title={`Documento ${indice} de esta página`}
           >
             #{indice}
+          </span>
+          {"_id" in doc && doc._id !== undefined && (
+            <span className="truncate font-jetbrains text-[11px] text-gdb-const">
+              {textoDeValor(doc._id)}
+            </span>
+          )}
+          <span className="shrink-0 font-jetbrains text-[10px] text-gdb-fgmuted">
+            {Object.keys(doc).length} {Object.keys(doc).length === 1 ? "campo" : "campos"}
           </span>
           {nCambios > 0 && (
             <span className="shrink-0 text-[10px] text-gdb-accent" title="Campos modificados sin guardar">
@@ -385,10 +439,10 @@ export function MongoDocuments({
   const [filtro, setFiltro] = React.useState(vistaInicial?.filtro ?? "");
   const [proyeccion, setProyeccion] = React.useState(vistaInicial?.proyeccion ?? "");
   const [orden, setOrden] = React.useState(vistaInicial?.orden ?? "");
-  const [opcionesAbiertas, setOpcionesAbiertas] = React.useState(vistaInicial?.opcionesAbiertas ?? false);
+  const [opcionesAbiertas] = React.useState(vistaInicial?.opcionesAbiertas ?? false);
   const [pagina, setPagina] = React.useState(vistaInicial?.pagina ?? 0);
   const [porPagina, setPorPagina] = React.useState(vistaInicial?.porPagina ?? TAMANOS_DE_PAGINA[0]);
-  const [vista, setVista] = React.useState<"lista" | "json">(vistaInicial?.vista ?? "lista");
+  const [vista, setVista] = React.useState<"lista" | "json" | "tabla">(vistaInicial?.vista ?? "lista");
   const [resultado, setResultado] = React.useState<MongoFindResult | null>(vistaInicial?.resultado ?? null);
   /**
    * Borradores por documento (fase 85): `clave` → valores editados. No tocan el servidor hasta
@@ -713,10 +767,13 @@ export function MongoDocuments({
   }, [pestanaId, filtro, proyeccion, orden, opcionesAbiertas, aplicado, pagina, porPagina, vista, resultado, borradores, erroresDoc]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-editor">
-      {/* --- Barra de consulta ------------------------------------------------ */}
-      <div className="flex shrink-0 flex-col gap-1 border-b border-gdb-border px-2 py-1.5">
-        <div className="flex items-center gap-1">
+    <div className="flex h-full min-h-0 flex-col bg-gdb-editor">
+      {/* --- Barra de consulta (estilo OpenDesign) ---------------------------- */}
+      <div className="grid shrink-0 grid-cols-1 items-end gap-2 border-b border-gdb-sep bg-gdb-chrome px-3 py-2.5 md:grid-cols-[minmax(200px,2fr)_minmax(130px,1fr)_minmax(130px,1fr)_auto]">
+        <div className="min-w-0">
+          <span className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wider text-gdb-muted">
+            Filtro
+          </span>
           <MongoQueryField
             valor={filtro}
             onCambio={setFiltro}
@@ -725,6 +782,34 @@ export function MongoDocuments({
             placeholder={'{ campo: "valor" }  ó  { edad: { $gt: 30 } }'}
             ariaLabel="Filtro de documentos"
           />
+        </div>
+        <div className="min-w-0">
+          <span className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wider text-gdb-muted">
+            Orden
+          </span>
+          <MongoQueryField
+            valor={orden}
+            onCambio={setOrden}
+            onEnter={buscar}
+            campos={campos}
+            placeholder="{ campo: -1 }"
+            ariaLabel="Orden"
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wider text-gdb-muted">
+            Proyección
+          </span>
+          <MongoQueryField
+            valor={proyeccion}
+            onCambio={setProyeccion}
+            onEnter={buscar}
+            campos={campos}
+            placeholder="{ campo: 1 }"
+            ariaLabel="Proyección"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"
             onClick={buscar}
@@ -746,18 +831,11 @@ export function MongoDocuments({
               void cargar({ filtro: "", proyeccion: "", orden: "" }, 0, porPagina);
             }}
             title="Limpiar el filtro"
-            className="h-7 border-gdb-border bg-transparent px-2"
+            className="h-7 border-gdb-sep bg-transparent px-2"
           >
             Limpiar
           </Button>
-          {/*
-            Sugerencias: el usuario no usa Mongo a diario y tenía que buscar por fuera cómo se escribe
-            lo que en SQL sabe de memoria («¿un LIKE?»). Cada entrada trae su equivalente en SQL y
-            pega la plantilla en la barra. Las plantillas están probadas para que SE EJECUTEN
-            (mongo-snippets.test.ts), no son ejemplos de adorno.
-          */}
           <DropdownMenu>
-            {/* `DropdownMenuTrigger` de base-ui no acepta `asChild`: se estiliza él mismo. */}
             <DropdownMenuTrigger
               title="Sugerencias de consulta (con su equivalente en SQL)"
               aria-label="Sugerencias de consulta"
@@ -770,7 +848,7 @@ export function MongoDocuments({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="max-h-[70vh] w-[380px] overflow-auto border-gdb-border bg-popover p-1 text-gdb-fg"
+              className="max-h-[70vh] w-[380px] overflow-auto border-gdb-sep bg-gdb-chrome p-1 text-gdb-fg"
             >
               {SUGERENCIAS_MONGO.map((grupo) => (
                 <DropdownMenuGroup key={grupo.titulo}>
@@ -781,15 +859,10 @@ export function MongoDocuments({
                     <DropdownMenuItem
                       key={item.etiqueta}
                       onClick={() => {
-                        // Reemplaza el filtro entero: la plantilla es una condición completa; lo que
-                        // hubiera escrito se perdería a propósito para no dejar JSON a medias.
                         setFiltro(item.plantilla);
                         setAplicado({ filtro: item.plantilla, proyeccion, orden });
                         setPagina(0);
                         void cargar({ filtro: item.plantilla, proyeccion, orden }, 0, porPagina);
-                        // El campo coloca el cursor al final; el usuario escribe encima del valor de
-                        // ejemplo. (El hueco seleccionado automáticamente llega con el foco, que el
-                        // `DropdownMenuItem` se lleva al cerrarse.)
                       }}
                       className="flex flex-col items-start gap-0.5 px-2 py-1.5 text-xs"
                     >
@@ -820,48 +893,43 @@ export function MongoDocuments({
               variant="outline"
               onClick={() => abrirDialogo("insertar")}
               title="Insertar un documento nuevo"
-              className="h-7 border-gdb-border bg-transparent px-2"
+              className="h-7 border-gdb-sep bg-transparent px-2"
             >
               + Documento
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setOpcionesAbiertas((a) => !a)}
-            title="Proyección y orden"
-            aria-expanded={opcionesAbiertas}
-            className="h-7 px-2 text-xs"
-          >
-            Opciones {opcionesAbiertas ? "▴" : "▾"}
-          </Button>
         </div>
+      </div>
 
-        {opcionesAbiertas && (
-          <div className="flex items-center gap-1">
-            <MongoQueryField
-              valor={proyeccion}
-              onCambio={setProyeccion}
-              campos={campos}
-              placeholder="{ campo: 1 } — proyección"
-              ariaLabel="Proyección"
-            />
-            <MongoQueryField
-              valor={orden}
-              onCambio={setOrden}
-              onEnter={buscar}
-              campos={campos}
-              placeholder="{ campo: -1 } — orden"
-              ariaLabel="Orden"
-            />
+      {/* --- Barra de herramientas de resultados (3 vistas + paginación) ------- */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gdb-sep bg-gdb-th px-3 py-1.5">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-md border border-gdb-sep bg-gdb-editor p-0.5" role="tablist">
+            {(["lista", "json", "tabla"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setVista(v)}
+                title={
+                  v === "lista"
+                    ? "Vista de tarjetas (árbol BSON)"
+                    : v === "json"
+                      ? "Vista JSON"
+                      : "Vista de tabla"
+                }
+                className={cn(
+                  "rounded-sm px-2.5 py-0.5 text-[11.5px] font-medium transition-colors",
+                  vista === v
+                    ? "bg-gdb-contrast text-gdb-fgstrong shadow-xs"
+                    : "text-gdb-fgdim hover:text-gdb-fgstrong"
+                )}
+              >
+                {v === "lista" ? "Lista" : v === "json" ? "JSON" : "Tabla"}
+              </button>
+            ))}
           </div>
-        )}
-
-        {/* --- Contador y paginación, a la derecha como en Compass ------------ */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[11px] text-gdb-fgmuted">
+          <div className="flex items-center gap-1.5 text-[11.5px] text-gdb-fgdim">
             <IjIcon name="mongodb" className="size-3.5 text-gdb-enginemongo" />
-            <span className="font-jetbrains">{coleccion}</span>
+            <span className="font-jetbrains text-gdb-fg">{coleccion}</span>
             {resultado && (
               <span>
                 · {desde}–{hasta} de {total} · {resultado.ms} ms
@@ -869,64 +937,49 @@ export function MongoDocuments({
             )}
             {cargando && !resultado && <span>· cargando…</span>}
           </div>
-          <div className="flex items-center gap-1">
-            <select
-              value={porPagina}
-              onChange={(e) => {
-                const tamano = Number(e.target.value);
-                setPorPagina(tamano);
-                irA(0, tamano);
-              }}
-              aria-label="Documentos por página"
-              className="h-6 rounded border border-gdb-border bg-gdb-field px-1 text-[11px] text-gdb-fg"
-            >
-              {TAMANOS_DE_PAGINA.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              disabled={pagina === 0 || cargando}
-              onClick={() => irA(pagina - 1)}
-              title="Página anterior"
-              className="h-6 w-6"
-            >
-              ‹
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              disabled={!haySiguiente || cargando}
-              onClick={() => irA(pagina + 1)}
-              title="Página siguiente"
-              className="h-6 w-6"
-            >
-              ›
-            </Button>
-            <div className="ml-1 flex items-center rounded border border-gdb-border">
-              {(["lista", "json"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setVista(v)}
-                  title={v === "lista" ? "Vista de tarjetas" : "Vista JSON"}
-                  className={cn(
-                    "px-1.5 py-[1px] text-[10px]",
-                    vista === v ? "bg-gdb-hover text-gdb-fgstrong" : "text-gdb-fgmuted hover:text-gdb-fg"
-                  )}
-                >
-                  {v === "lista" ? "Lista" : "JSON"}
-                </button>
-              ))}
-            </div>
-          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <select
+            value={porPagina}
+            onChange={(e) => {
+              const tamano = Number(e.target.value);
+              setPorPagina(tamano);
+              irA(0, tamano);
+            }}
+            aria-label="Documentos por página"
+            className="h-6 rounded border border-gdb-sep bg-gdb-editor px-1.5 text-[11px] text-gdb-fg"
+          >
+            {TAMANOS_DE_PAGINA.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            disabled={pagina === 0 || cargando}
+            onClick={() => irA(pagina - 1)}
+            title="Página anterior"
+            className="h-6 w-6"
+          >
+            ‹
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            disabled={!haySiguiente || cargando}
+            onClick={() => irA(pagina + 1)}
+            title="Página siguiente"
+            className="h-6 w-6"
+          >
+            ›
+          </Button>
         </div>
       </div>
 
       {/* --- Documentos ------------------------------------------------------ */}
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+      <div className="min-h-0 flex-1 overflow-auto p-3">
         {error && (
           <div
             role="alert"
@@ -940,32 +993,113 @@ export function MongoDocuments({
             No hay documentos que cumplan el filtro.
           </p>
         )}
-        <div className="flex flex-col gap-2">
-          {resultado?.documentos.map((doc, i) => {
-            const clave = claveDe(doc, pagina * porPagina + i);
-            return (
-              <TarjetaDeDocumento
-                key={clave}
-                doc={conBorrador(doc, clave)}
-                original={doc}
-                indice={pagina * porPagina + i + 1}
-                vista={vista}
-                editable={!session.readOnly}
-                guardando={Boolean(guardando[clave])}
-                error={erroresDoc[clave] ?? null}
-                onCambio={(campo, valor) => editarCampo(clave, campo, valor)}
-                onRevertir={() => revertir(clave)}
-                onGuardar={() => void guardar(doc, clave)}
-                onEditarJson={() => abrirDialogo("editar", doc)}
-                onDuplicar={() => abrirDialogo("duplicar", doc)}
-                onBorrar={() => {
-                  setBorrarError(null);
-                  setPorBorrar(doc);
-                }}
-              />
+        {vista === "tabla" && resultado && resultado.documentos.length > 0 ? (
+          (() => {
+            const cols = Array.from(
+              new Set(resultado.documentos.flatMap((d) => Object.keys(d)))
             );
-          })}
-        </div>
+            return (
+              <div className="overflow-auto rounded-md border border-gdb-sep bg-gdb-editor">
+                <table className="w-full border-separate border-spacing-0 font-jetbrains text-xs">
+                  <thead>
+                    <tr>
+                      <th className="sticky top-0 z-10 w-10 border-b border-r border-gdb-sep bg-gdb-th px-2 py-1.5 text-center text-[11px] font-medium text-gdb-muted">
+                        #
+                      </th>
+                      {cols.map((col) => (
+                        <th
+                          key={col}
+                          className="sticky top-0 z-10 border-b border-r border-gdb-sep bg-gdb-th px-2.5 py-1.5 text-left font-sans text-xs font-semibold text-gdb-fgstrong whitespace-nowrap"
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.documentos.map((doc, i) => {
+                      const clave = claveDe(doc, pagina * porPagina + i);
+                      const actual = conBorrador(doc, clave);
+                      return (
+                        <tr
+                          key={clave}
+                          onClick={() => !session.readOnly && abrirDialogo("editar", doc)}
+                          className={cn(
+                            "odd:bg-gdb-editor even:bg-gdb-contrast/45 hover:bg-gdb-rowhover",
+                            !session.readOnly && "cursor-pointer"
+                          )}
+                        >
+                          <td className="border-b border-r border-gdb-grid bg-gdb-th/70 px-2 py-1 text-center text-[11px] text-gdb-muted select-none">
+                            {pagina * porPagina + i + 1}
+                          </td>
+                          {cols.map((col) => {
+                            const val = actual[col];
+                            return (
+                              <td
+                                key={col}
+                                className="max-w-[260px] truncate border-b border-r border-gdb-grid px-2.5 py-1 text-gdb-fg"
+                              >
+                                {val === undefined || val === null ? (
+                                  <span className="rounded border border-gdb-sep bg-gdb-contrast px-1.5 py-0.5 text-[10.5px] italic text-gdb-muted">
+                                    {val === null ? "null" : "—"}
+                                  </span>
+                                ) : typeof val === "boolean" ? (
+                                  <span
+                                    className={cn(
+                                      "rounded px-1.5 py-0.5 text-[11px] font-semibold",
+                                      val
+                                        ? "bg-gdb-okbg text-gdb-okfg"
+                                        : "bg-gdb-dangerbg text-gdb-dangerfg"
+                                    )}
+                                  >
+                                    {String(val)}
+                                  </span>
+                                ) : typeof val === "object" ? (
+                                  <span className="rounded bg-gdb-accent/15 px-1.5 py-0.5 text-[11px] text-gdb-accent">
+                                    {Array.isArray(val) ? `[${val.length}]` : "{…}"}
+                                  </span>
+                                ) : (
+                                  String(val)
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {resultado?.documentos.map((doc, i) => {
+              const clave = claveDe(doc, pagina * porPagina + i);
+              return (
+                <TarjetaDeDocumento
+                  key={clave}
+                  doc={conBorrador(doc, clave)}
+                  original={doc}
+                  indice={pagina * porPagina + i + 1}
+                  vista={vista}
+                  editable={!session.readOnly}
+                  guardando={Boolean(guardando[clave])}
+                  error={erroresDoc[clave] ?? null}
+                  onCambio={(campo, valor) => editarCampo(clave, campo, valor)}
+                  onRevertir={() => revertir(clave)}
+                  onGuardar={() => void guardar(doc, clave)}
+                  onEditarJson={() => abrirDialogo("editar", doc)}
+                  onDuplicar={() => abrirDialogo("duplicar", doc)}
+                  onBorrar={() => {
+                    setBorrarError(null);
+                    setPorBorrar(doc);
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <MongoDocumentDialog

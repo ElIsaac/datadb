@@ -39,7 +39,7 @@ export interface VistaDeColeccion {
   aplicado: { filtro: string; proyeccion: string; orden: string };
   pagina: number;
   porPagina: number;
-  vista: "lista" | "json";
+  vista: "lista" | "json" | "tabla";
   /** La última página traída del worker, ya pintada. `null` = no había resultado. */
   resultado: MongoFindResult | null;
   /** Borradores de edición sin guardar, por clave de documento (fase 85). */
