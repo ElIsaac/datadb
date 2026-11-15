@@ -1033,6 +1033,21 @@ export const ResultsGrid = React.memo(function ResultsGrid({
               if (!fila || !pkKey) return false;
               return editedCells.has(`${fila[pkKey]}::${nombre}`);
             }}
+            esColumnaFk={
+              onNavigateFk && tableContext
+                ? (nombre) => Boolean(tableContext.columns.find((c) => c.name === columnaReal(nombre))?.fk)
+                : undefined
+            }
+            onClickFk={
+              onNavigateFk && tableContext
+                ? (nombre, indiceOriginal) => {
+                    const meta = tableContext.columns.find((c) => c.name === columnaReal(nombre));
+                    const fila = editedData[indiceOriginal];
+                    if (!meta?.fk || !fila) return;
+                    onNavigateFk(meta.fk.schema, meta.fk.table, meta.fk.column, fila[nombre]);
+                  }
+                : undefined
+            }
             /*
               Fase 12 (T1, D5): publicar la celda activa para el value editor del dock derecho.
               Se calcula aquí y no en la rejilla porque las reglas de «editable» son del contenedor

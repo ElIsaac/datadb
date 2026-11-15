@@ -32,6 +32,7 @@ import {
   DataEditor,
   GridCellKind,
   type DataEditorRef,
+  type DrawCellCallback,
   type DrawHeaderCallback,
   type GridCell,
   type GridColumn,
@@ -144,9 +145,24 @@ export interface DataGridProps {
    * Devuelve `""` cuando no hay nada que copiar; en ese caso la rejilla no toca el portapapeles.
    */
   textoParaCopiar?: (extraccion: ExtraccionDeSeleccion) => string;
+  /** Indica si la columna tiene una clave foránea navegable. */
+  esColumnaFk?: (nombreDeColumna: string) => boolean;
+  /** Se dispara al hacer clic sobre el indicador de flecha FK en una celda con valor no nulo. */
+  onClickFk?: (nombreDeColumna: string, indiceOriginal: number) => void;
 }
 
 const ANCHO_POR_DEFECTO = 150;
+const FK_ICON_HIT_WIDTH = 22;
+
+function isInFkArrowHitZone(
+  rectWidth: number,
+  contentAlign: "left" | "right" | "center" | undefined,
+  localX: number
+): boolean {
+  if (rectWidth < 36) return false;
+  if (contentAlign === "right") return localX >= 0 && localX <= FK_ICON_HIT_WIDTH;
+  return localX >= rectWidth - FK_ICON_HIT_WIDTH && localX <= rectWidth;
+}
 
 /*
  * ---- Indicador de orden de la cabecera (fase 14, T3) ----
@@ -319,6 +335,8 @@ export function DataGrid({
   siempreVisibles,
   onFilasVisibles,
   textoParaCopiar,
+  esColumnaFk,
+  onClickFk,
 }: DataGridProps) {
   const ref = React.useRef<DataEditorRef>(null);
   const [contenedorRef, tam] = useTamano();
@@ -669,6 +687,60 @@ export function DataGrid({
     [columnas, filas, indices, leerToken, puedeEditar, celdaEditada, coloresPorTipo, porTipo]
   );
 
+  const dibujarCelda = React.useCallback<DrawCellCallback>(
+    (args, drawContent) => {
+      drawContent();
+      if (!esColumnaFk) return;
+      const columna = columnas[args.col];
+      if (!columna || !esColumnaFk(columna.name)) return;
+      const filaOriginal = indices[args.row] ?? args.row;
+      const valor = filas[filaOriginal]?.[columna.name];
+      if (valor === null || valor === undefined) return;
+      if (args.rect.width < 36) return;
+
+      const onLeft = args.cell.contentAlign === "right";
+      const cx = onLeft ? args.rect.x + 12 : args.rect.x + args.rect.width - 12;
+      const cy = args.rect.y + args.rect.height / 2;
+      const hovered =
+        args.hoverX !== undefined &&
+        isInFkArrowHitZone(args.rect.width, args.cell.contentAlign, args.hoverX);
+      const accent = leerToken("--gdb-accent");
+
+      const { ctx } = args;
+      ctx.save();
+      // Pill badge behind the arrow so FK cells are immediately recognizable as clickable links
+      const badgeW = 18;
+      const badgeH = Math.min(18, Math.max(14, args.rect.height - 6));
+      const bx = cx - badgeW / 2;
+      const by = cy - badgeH / 2;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, badgeW, badgeH, 4);
+      ctx.globalAlpha = hovered ? 0.28 : 0.14;
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.globalAlpha = hovered ? 0.85 : 0.4;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.globalAlpha = hovered ? 1 : 0.9;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      // Diagonal arrow ↗ inside the badge
+      ctx.moveTo(cx - 3.5, cy + 3.5);
+      ctx.lineTo(cx + 3.5, cy - 3.5);
+      ctx.moveTo(cx - 0.5, cy - 3.5);
+      ctx.lineTo(cx + 3.5, cy - 3.5);
+      ctx.lineTo(cx + 3.5, cy + 0.5);
+      ctx.stroke();
+      ctx.restore();
+    },
+    [esColumnaFk, columnas, indices, filas, leerToken]
+  );
+
   return (
     <div
       ref={contenedorRef}
@@ -711,6 +783,21 @@ export function DataGrid({
           filaDeFiltrosRef.current?.sincronizar();
         }}
         getCellContent={getCellContent}
+        drawCell={dibujarCelda}
+        onCellClicked={(celda, evento) => {
+          if (!onClickFk || !esColumnaFk) return;
+          const [col, fila] = celda;
+          const columna = columnas[col];
+          if (!columna || !esColumnaFk(columna.name)) return;
+          const filaOriginal = indices[fila] ?? fila;
+          const valor = filas[filaOriginal]?.[columna.name];
+          if (valor === null || valor === undefined) return;
+          const tipo = columna.type ?? "";
+          const pintada = pintarCelda(valor, tipo);
+          const align = pintada.alineacion === "derecha" ? "right" : "left";
+          if (!isInFkArrowHitZone(evento.bounds.width, align, evento.localEventX)) return;
+          onClickFk(columna.name, filaOriginal);
+        }}
         // `clickable-number`, no `number`: con el segundo el número de fila es decorativo y
         // pinchar en él no selecciona la fila — y de esa selección viven Duplicar, Borrar y
         // Copiar. En el grid DOM el número ya era pulsable, así que esto conserva el gesto.
