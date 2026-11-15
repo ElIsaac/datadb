@@ -654,9 +654,11 @@ export function DataGrid({
           kind: GridCellKind.Boolean,
           data: booleano,
           allowOverlay: false,
-          readonly: soloLectura,
+          // `readonly: true` evita que glide use su hitbox interno oculto de checkbox;
+          // el clic en cualquier parte de la celda/pill y Enter/Space alternan el valor abajo.
+          readonly: true,
           hoverEffectIntensity: 0,
-          contentAlign: "center",
+          contentAlign: "left",
           copyData: booleano ? "true" : "false",
           themeOverride: {
             accentColor: leerToken("--gdb-accent"),
@@ -810,18 +812,39 @@ export function DataGrid({
         getCellContent={getCellContent}
         drawCell={dibujarCelda}
         onCellClicked={(celda, evento) => {
-          if (!onClickFk || !esColumnaFk) return;
           const [col, fila] = celda;
           const columna = columnas[col];
-          if (!columna || !esColumnaFk(columna.name)) return;
+          if (!columna) return;
           const filaOriginal = indices[fila] ?? fila;
           const valor = filas[filaOriginal]?.[columna.name];
-          if (valor === null || valor === undefined) return;
           const tipo = columna.type ?? "";
-          const pintada = pintarCelda(valor, tipo);
-          const align = pintada.alineacion === "derecha" ? "right" : "left";
-          if (!isInFkArrowHitZone(evento.bounds.width, align, evento.localEventX)) return;
-          onClickFk(columna.name, filaOriginal);
+
+          if (onClickFk && esColumnaFk?.(columna.name) && valor !== null && valor !== undefined) {
+            const pintada = pintarCelda(valor, tipo);
+            const align = pintada.alineacion === "derecha" ? "right" : "left";
+            if (isInFkArrowHitZone(evento.bounds.width, align, evento.localEventX)) {
+              onClickFk(columna.name, filaOriginal);
+              return;
+            }
+          }
+
+          if (esColumnaBooleana(tipo) && puedeEditar?.(columna.name)) {
+            const actual = valorBooleano(valor);
+            if (actual !== null) {
+              onEditarCelda?.(columna.name, filaOriginal, booleanoParaGuardar(valor, !actual));
+            }
+          }
+        }}
+        onCellActivated={([col, fila]) => {
+          const columna = columnas[col];
+          if (!columna || !puedeEditar?.(columna.name)) return;
+          if (!esColumnaBooleana(columna.type ?? "")) return;
+          const filaOriginal = indices[fila] ?? fila;
+          const valor = filas[filaOriginal]?.[columna.name];
+          const actual = valorBooleano(valor);
+          if (actual !== null) {
+            onEditarCelda?.(columna.name, filaOriginal, booleanoParaGuardar(valor, !actual));
+          }
         }}
         // `clickable-number`, no `number`: con el segundo el número de fila es decorativo y
         // pinchar en él no selecciona la fila — y de esa selección viven Duplicar, Borrar y
@@ -894,6 +917,8 @@ export function DataGrid({
           formatos. `selectAll` se queda: ⌘A es de glide.
         */
         keybindings={{ copy: false, selectAll: true }}
+        maxColumnWidth={2400}
+        maxColumnAutoWidth={1200}
         onColumnResize={(columna, nuevoAncho) => {
           if (!columna.id) return;
           onAnchoCambiado?.(columna.id, nuevoAncho);
