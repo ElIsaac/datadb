@@ -210,6 +210,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       const { schema, table, whereColumn, whereValue } = action.payload;
       const existing = state.tableTabs.find(
         (t) =>
+          (t.consoleId ?? state.activeConsoleId) === state.activeConsoleId &&
           t.target.schema === schema &&
           t.target.table === table &&
           t.target.whereColumn === whereColumn &&
@@ -221,7 +222,12 @@ function reducer(state: AppState, action: AppAction): AppState {
       const id = whereColumn
         ? `${schema}.${table}?${Date.now().toString(36)}`
         : `${schema}.${table}`;
-      const tab: TableTab = { id, kind: "table", target: { schema, table, whereColumn, whereValue } };
+      const tab: TableTab = {
+        id,
+        consoleId: state.activeConsoleId,
+        kind: "table",
+        target: { schema, table, whereColumn, whereValue },
+      };
       return {
         ...state,
         tableTabs: [...state.tableTabs, tab],

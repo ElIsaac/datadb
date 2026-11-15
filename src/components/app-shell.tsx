@@ -910,24 +910,33 @@ export function AppShell() {
             ) : (
               (() => {
                 const tab = state.tableTabs.find((t) => t.id === state.activeTabId);
-                return tab ? (
-                  tab.kind === "diagram" ? (
-                    <ErDiagramTab tab={tab} />
-                  ) : tab.kind === "sqlLog" ? (
-                    <SqlLogTab />
-                  ) : activeConsole.session?.type === "mongodb" ? (
+                if (!tab) return null;
+                if (tab.kind === "diagram") return <ErDiagramTab tab={tab} />;
+                if (tab.kind === "sqlLog") return <SqlLogTab />;
+
+                const tabConsole =
+                  (tab.consoleId ? state.consoles.find((c) => c.id === tab.consoleId) : undefined) ??
+                  activeConsole;
+                const tabEngine = (tabConsole.session ?? tabConsole.binding)?.type;
+
+                if (tabEngine === "mongodb") {
+                  return tabConsole.session ? (
                     /* Fase 81: en Mongo la «tabla» es una colección: la pestaña monta la vista de
                        documentos (barra de consulta + tarjetas), no la rejilla SQL. */
                     <MongoDocuments
                       key={tab.id}
                       pestanaId={tab.id}
-                      session={activeConsole.session}
+                      session={tabConsole.session}
                       coleccion={tab.target.table}
                     />
                   ) : (
-                    <TableViewTab tab={tab} />
-                  )
-                ) : null;
+                    <div className="flex h-full items-center justify-center bg-editor text-xs text-gdb-fgmuted">
+                      Esta colección pertenece a una consola de MongoDB desconectada. Reconéctala desde su consola para ver los documentos.
+                    </div>
+                  );
+                }
+
+                return <TableViewTab tab={tab} />;
               })()
             )}
           </div>

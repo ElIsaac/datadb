@@ -218,6 +218,8 @@ export interface TableContext {
 
 export interface TableTab {
   id: string;
+  /** Consola desde la que se abrió la pestaña (evita mezclar colecciones Mongo con sesiones SQL). */
+  consoleId?: string;
   /** Fase 3 (T7): "sqlLog" = el log SQL de solo lectura (una sola pestaña, id "sql-log"; `target` va vacío). */
   kind?: "table" | "diagram" | "sqlLog";
   target: {
