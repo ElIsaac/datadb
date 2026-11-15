@@ -7,6 +7,7 @@ import { runQuery as apiRunQuery } from "@/lib/api";
 import { quoteIdentifier, quoteValue } from "@/lib/quote";
 import type { TableTab, TableContext, QueryResult } from "@/lib/types";
 import { ResultsGrid } from "./results-grid";
+import { FkQuickViewDialog, type FkQuickTarget } from "./fk-quick-view-dialog";
 import { ColumnAutocompleteInput } from "./column-autocomplete-input";
 import { IjIcon } from "@/components/ij-icon";
 import { useConectarConsola } from "@/hooks/use-conectar-consola";
@@ -172,10 +173,21 @@ export function TableViewTab({ tab }: TableViewTabProps) {
     void load(buildQuery(), { campo: "order", order: orderBy });
   }, [orderBy, buildQuery, load]);
 
+  const [fkQuickTarget, setFkQuickTarget] = React.useState<FkQuickTarget | null>(null);
+
   function handleNavigateFk(schema: string, table: string, column: string, value: unknown) {
+    setFkQuickTarget({ schema, table, column, value });
+  }
+
+  function handleOpenFkInTab(fkTarget: FkQuickTarget) {
     dispatch({
       type: "OPEN_TABLE_TAB",
-      payload: { schema, table, whereColumn: column, whereValue: value },
+      payload: {
+        schema: fkTarget.schema,
+        table: fkTarget.table,
+        whereColumn: fkTarget.column,
+        whereValue: fkTarget.value,
+      },
     });
   }
 
@@ -252,6 +264,12 @@ export function TableViewTab({ tab }: TableViewTabProps) {
           />
         </div>
       )}
+      <FkQuickViewDialog
+        target={fkQuickTarget}
+        session={session}
+        onClose={() => setFkQuickTarget(null)}
+        onOpenInTab={handleOpenFkInTab}
+      />
     </div>
   );
 }

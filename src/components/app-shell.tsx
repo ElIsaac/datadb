@@ -30,6 +30,7 @@ import { MongoDocuments } from "./mongo-documents";
 import { AppTopBar } from "./app-top-bar";
 import { ConnectionsModal } from "./connections-modal";
 import { TableViewTab } from "./table-view-tab";
+import { FkQuickViewDialog, type FkQuickTarget } from "./fk-quick-view-dialog";
 import { ValueEditorPanel } from "./value-editor/value-editor-panel";
 import { ErDiagramTab } from "./er-diagram-tab";
 import { CommandPalette } from "./command-palette";
@@ -245,6 +246,7 @@ export function AppShell() {
   // La pestaña de resultado más reciente: cuando aparece una nueva, el dock inferior se trae al frente.
   const lastResultTabId = activeConsole.resultTabs[activeConsole.resultTabs.length - 1]?.id ?? null;
   const [txMode, setTxMode] = React.useState<"auto" | "manual">("auto");
+  const [fkQuickTarget, setFkQuickTarget] = React.useState<FkQuickTarget | null>(null);
 
   // Fase 6 (R5): el menú nativo. `useMenuActions` escucha lo que elige el usuario en la barra de
   // macOS; `useMenuState` le dice a `main` qué entradas tienen sentido ahora mismo para que el
@@ -460,6 +462,7 @@ export function AppShell() {
     try {
       await apiCommitTransaction(session.sessionId);
       dispatch({ type: "SET_TRANSACTION_ACTIVE", payload: false });
+      setTxMode("auto");
       toast.success("Transacción confirmada (COMMIT)");
     } catch (err) {
       toast.error(String(err));
@@ -471,6 +474,7 @@ export function AppShell() {
     try {
       await apiRollbackTransaction(session.sessionId);
       dispatch({ type: "SET_TRANSACTION_ACTIVE", payload: false });
+      setTxMode("auto");
       toast.success("Transacción revertida (ROLLBACK)");
     } catch (err) {
       toast.error(String(err));
@@ -735,9 +739,18 @@ export function AppShell() {
 
 
   function handleNavigateFk(schema: string, table: string, column: string, value: unknown) {
+    setFkQuickTarget({ schema, table, column, value });
+  }
+
+  function handleOpenFkInTab(target: FkQuickTarget) {
     dispatch({
       type: "OPEN_TABLE_TAB",
-      payload: { schema, table, whereColumn: column, whereValue: value },
+      payload: {
+        schema: target.schema,
+        table: target.table,
+        whereColumn: target.column,
+        whereValue: target.value,
+      },
     });
   }
 
@@ -760,7 +773,6 @@ export function AppShell() {
         <AppTopBar
           onOpenConnections={() => setConnectionsOpen(true)}
           onOpenAppearance={() => setAppearanceOpen(true)}
-          txMode={txMode}
         />
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
           <IjIcon name="database" size={32} className="opacity-40" />
@@ -787,7 +799,6 @@ export function AppShell() {
       <AppTopBar
         onOpenConnections={() => setConnectionsOpen(true)}
         onOpenAppearance={() => setAppearanceOpen(true)}
-        txMode={txMode}
       >
         {layout.bar === "header" && <ToolWindowBar variant="header" />}
       </AppTopBar>
@@ -823,7 +834,7 @@ export function AppShell() {
           {/* Fase 9 (T2): el dock izquierdo hospeda Explorador, Guardadas e IA (D4/D5). */}
           <ToolWindowDock dock="left">{renderToolWindow}</ToolWindowDock>
         </Panel>
-        <Separator className={cn("w-2 cursor-col-resize bg-border hover:bg-primary/40 data-[resize-handle-active]:bg-primary/60 transition-colors", !leftDockVisible && "w-0")} />
+        <Separator className={cn("relative w-px cursor-col-resize bg-gdb-sep transition-colors hover:bg-gdb-accent data-[resize-handle-active]:bg-gdb-accent after:absolute after:inset-y-0 after:-inset-x-1 after:content-['']", !leftDockVisible && "w-0")} />
 
         <Panel id="main-panel" defaultSize="78" minSize="20" className="relative flex min-w-0 flex-col bg-background">
           <TabBar />
@@ -877,10 +888,10 @@ export function AppShell() {
                       </button>
                     </div>
                   ) : (
-                    <SqlEditor />
+                    <SqlEditor txMode={txMode} />
                   )}
                 </Panel>
-                <Separator className="h-2 cursor-row-resize bg-border hover:bg-primary/40 data-[resize-handle-active]:bg-primary/60 transition-colors" />
+                <Separator className="relative h-px cursor-row-resize bg-gdb-sep transition-colors hover:bg-gdb-accent data-[resize-handle-active]:bg-gdb-accent after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']" />
                 <Panel
                   id="sql-results-panel"
                   defaultSize="55"
@@ -926,7 +937,7 @@ export function AppShell() {
           Fase 9 (D4): dock derecho RESERVADO para el value editor (fase 12, R37): de fábrica no tiene ninguna
           tool window y queda colapsado. Desde T3 «Mover a ▸ Derecha» puede llevar ahí cualquiera.
         */}
-        <Separator className={cn("w-2 cursor-col-resize bg-border hover:bg-primary/40 data-[resize-handle-active]:bg-primary/60 transition-colors", !rightDockVisible && "w-0")} />
+        <Separator className={cn("relative w-px cursor-col-resize bg-gdb-sep transition-colors hover:bg-gdb-accent data-[resize-handle-active]:bg-gdb-accent after:absolute after:inset-y-0 after:-inset-x-1 after:content-['']", !rightDockVisible && "w-0")} />
         <Panel
           id="right-panel"
           defaultSize="0"
@@ -947,6 +958,12 @@ export function AppShell() {
 
       <StatusBar />
       <CommandPalette onDisconnect={handleDisconnect} />
+      <FkQuickViewDialog
+        target={fkQuickTarget}
+        session={session}
+        onClose={() => setFkQuickTarget(null)}
+        onOpenInTab={handleOpenFkInTab}
+      />
     </div>
   );
 }
