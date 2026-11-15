@@ -141,6 +141,45 @@ export function popupWidthFor(items: readonly Suggestion[], max: number): number
   return Math.round(Math.min(upper, Math.max(260, widest + CHROME)));
 }
 
+const POPUP_ITEM_HEIGHT = 22;
+const POPUP_CHROME_HEIGHT = 8;
+const POPUP_MAX_HEIGHT = 264;
+const POPUP_MIN_HEIGHT = 66;
+
+export interface PopupVerticalPlacement {
+  placeAbove: boolean;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+}
+
+/**
+ * Vertical placement of the completion popup inside `.ld-content`.
+ * Flips above the active line when space below is insufficient and there is more room above,
+ * clamping `maxHeight` to the visible viewport so the popup is never clipped at the bottom.
+ */
+export function popupVerticalPlacement(params: {
+  itemCount: number;
+  lineTop: number;
+  lineHeight: number;
+  scrollTop: number;
+  viewportHeight: number;
+  contentHeight: number;
+}): PopupVerticalPlacement {
+  const { itemCount, lineTop, lineHeight, scrollTop, viewportHeight, contentHeight } = params;
+  const lineBottom = lineTop + lineHeight;
+  const spaceBelow = Math.max(0, scrollTop + viewportHeight - lineBottom);
+  const spaceAbove = Math.max(0, lineTop - scrollTop);
+  const estimatedHeight = Math.min(POPUP_MAX_HEIGHT, itemCount * POPUP_ITEM_HEIGHT + POPUP_CHROME_HEIGHT);
+  const placeAbove = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+  const available = placeAbove ? spaceAbove : spaceBelow;
+  const maxHeight = Math.min(POPUP_MAX_HEIGHT, Math.max(POPUP_MIN_HEIGHT, available - 4));
+  if (placeAbove) {
+    return { placeAbove: true, bottom: contentHeight - lineTop, maxHeight };
+  }
+  return { placeAbove: false, top: lineBottom, maxHeight };
+}
+
 /**
  * ¿Hay que abrir el popup después de este carácter? Se abre al teclear dentro de una palabra y
  * justo después de un `.`; NO tras un espacio, un paréntesis o una coma, donde el popup estorba.

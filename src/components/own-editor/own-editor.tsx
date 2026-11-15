@@ -16,6 +16,7 @@ import { IjIcon, type IjIconName } from "@/components/ij-icon";
 import {
   completionWindow,
   insertionFor,
+  popupVerticalPlacement,
   popupWidthFor,
   rankSuggestions,
   shouldOpenAfter,
@@ -236,6 +237,8 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
   const goalColumnRef = React.useRef<number | null>(null);
   /** Tras `compositionend` puede llegar un `input` con el texto ya insertado: se salta uno. */
   const skipInputRef = React.useRef(false);
+  /** Marca que la última edición/movimiento debe dejar el cursor dentro de la ventana visible. */
+  const pendingScrollRef = React.useRef(false);
 
   const snapshot = model.snapshot;
   const selection = snapshot.selection;
@@ -334,33 +337,47 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
   }, []);
 
   // --- ayudas de edición --------------------------------------------------------------------
+  React.useLayoutEffect(() => {
+    if (!pendingScrollRef.current) return;
+    pendingScrollRef.current = false;
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { line, col } = model.positionAt(selection.head);
+    const visibleLine = posicionDe(line) ?? line;
+    const lineTop = TOP_PAD + visibleLine * LINE_HEIGHT;
+    const lineBottom = lineTop + LINE_HEIGHT;
+    if (lineTop - TOP_PAD < el.scrollTop) {
+      el.scrollTop = Math.max(0, lineTop - TOP_PAD);
+    } else if (lineBottom + TOP_PAD > el.scrollTop + el.clientHeight) {
+      el.scrollTop = lineBottom + TOP_PAD - el.clientHeight;
+    }
+    const left = gutterWidth + col * charWidth;
+    if (left < el.scrollLeft + gutterWidth) {
+      el.scrollLeft = Math.max(0, left - gutterWidth);
+    } else if (left + charWidth > el.scrollLeft + el.clientWidth) {
+      el.scrollLeft = left + charWidth - el.clientWidth;
+    }
+    if (el.scrollTop !== scrollTop) {
+      setScrollTop(el.scrollTop);
+    }
+  }, [model, selection.head, posicionDe, gutterWidth, charWidth, scrollTop, editVersion]);
+
   const commit = React.useCallback(
     (next: { text: string; selection: Selection }) => {
       emittedRef.current = next.text;
       onChange?.(next.text);
+      pendingScrollRef.current = true;
       bumpEdit();
       forceRender();
-      // Mantener el cursor a la vista: es lo que hace que teclear al final de una línea larga no se
-      // sienta roto. Se hace en el siguiente frame para leer medidas ya aplicadas.
-      requestAnimationFrame(() => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        const { line, col } = model.positionAt(next.selection.head);
-        const top = TOP_PAD + line * LINE_HEIGHT;
-        if (top < el.scrollTop) el.scrollTop = top;
-        else if (top + LINE_HEIGHT > el.scrollTop + el.clientHeight) el.scrollTop = top + LINE_HEIGHT - el.clientHeight;
-        const left = gutterWidth + col * charWidth;
-        if (left < el.scrollLeft + gutterWidth) el.scrollLeft = Math.max(0, left - gutterWidth);
-        else if (left + charWidth > el.scrollLeft + el.clientWidth) el.scrollLeft = left + charWidth - el.clientWidth;
-      });
     },
-    [model, onChange, gutterWidth, charWidth]
+    [onChange]
   );
 
   const moveTo = React.useCallback(
     (offset: number, extend: boolean) => {
       const clampOffset = clamp(offset, 0, model.length);
       const next = model.setSelection(extend ? { anchor: selection.anchor, head: clampOffset } : collapse(clampOffset));
+      pendingScrollRef.current = true;
       forceRender();
       const { line, col } = model.positionAt(next.selection.head);
       void line;
@@ -883,6 +900,27 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
     }
   }
   const caretTop = TOP_PAD + caretIndex * LINE_HEIGHT;
+  const popupPos = popup ? model.positionAt(popup.from) : null;
+  const popupVisibleLine = popupPos ? (posicionDe(popupPos.line) ?? popupPos.line) : 0;
+  const popupPlacement = popup
+    ? popupVerticalPlacement({
+        itemCount: popup.items.length,
+        lineTop: TOP_PAD + popupVisibleLine * LINE_HEIGHT,
+        lineHeight: LINE_HEIGHT,
+        scrollTop,
+        viewportHeight,
+        contentHeight,
+      })
+    : null;
+  const popupMaxWidth = Math.max(240, viewportWidth - gutterWidth - 12);
+  const popupWidth = popup ? popupWidthFor(popup.items, popupMaxWidth) : 0;
+  const popupLeft =
+    popup && popupPos
+      ? Math.max(
+          gutterWidth,
+          Math.min(gutterWidth + popupPos.col * charWidth, Math.max(contentWidth, viewportWidth) - popupWidth - 12)
+        )
+      : 0;
 
   /**
    * Rectángulos de un conjunto de rangos, solamente de las líneas visibles. Se recorre la lista (ya
@@ -942,6 +980,7 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
       },
       setSelection: (from: number, to: number) => {
         model.setSelection({ anchor: from, head: to });
+        pendingScrollRef.current = true;
         forceRender();
       },
       replaceSelection: (text: string) => commit(model.insert(text)),
@@ -1061,26 +1100,20 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
               {composing}
             </span>
           )}
-          {popup && (
+          {popup && popupPlacement && (
             <div
               className="ld-popup"
               style={{
                 // Anclado al INICIO de la palabra que se completa, no al cursor (como VS Code):
                 // cuando el prefijo crece, el popup no se va corriendo hacia la derecha.
-                top: TOP_PAD + model.positionAt(popup.from).line * LINE_HEIGHT + LINE_HEIGHT,
+                top: popupPlacement.top,
+                bottom: popupPlacement.bottom,
+                maxHeight: popupPlacement.maxHeight,
                 // R89: el ancho sale de la fila MÁS LARGA (antes, tope fijo de 340 px y los nombres
                 // largos —`banks_deposits_bankdeposit`— se cortaban con «…»), acotado al área visible.
                 // Si aun así no cabe, se recorta el detalle de la derecha, nunca el nombre (CSS).
-                width: popupWidthFor(popup.items, Math.max(240, viewportWidth - gutterWidth - 12)),
-                left: Math.max(
-                  gutterWidth,
-                  Math.min(
-                    gutterWidth + model.positionAt(popup.from).col * charWidth,
-                    Math.max(contentWidth, viewportWidth) -
-                      popupWidthFor(popup.items, Math.max(240, viewportWidth - gutterWidth - 12)) -
-                      12
-                  )
-                ),
+                width: popupWidth,
+                left: popupLeft,
               }}
               onMouseDown={(e) => e.preventDefault()}
             >
@@ -1172,6 +1205,7 @@ export const OwnEditor = React.forwardRef<OwnEditorHandle, OwnEditorProps>(funct
                 const columna = clamp((Number(columnaTexto) || 1) - 1, 0, model.line(linea).length);
                 const destino = model.offsetAt(linea, columna);
                 model.setSelection({ anchor: destino, head: destino });
+                pendingScrollRef.current = true;
                 forceRender();
               }
               setGotoOpen(false);

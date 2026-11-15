@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   completionWindow,
   insertionFor,
+  popupVerticalPlacement,
   rankSuggestions,
   shouldOpenAfter,
   type Suggestion,
@@ -73,4 +74,48 @@ test("el popup no se abre tras espacio, coma ni paréntesis", () => {
   assert.equal(shouldOpenAfter(" "), false);
   assert.equal(shouldOpenAfter(","), false);
   assert.equal(shouldOpenAfter("("), false);
+});
+
+test("popupVerticalPlacement places below when there is enough room", () => {
+  const res = popupVerticalPlacement({
+    itemCount: 5,
+    lineTop: 24,
+    lineHeight: 20,
+    scrollTop: 0,
+    viewportHeight: 320,
+    contentHeight: 600,
+  });
+  assert.equal(res.placeAbove, false);
+  assert.equal(res.top, 44);
+  assert.equal(res.bottom, undefined);
+  assert.equal(res.maxHeight, 264);
+});
+
+test("popupVerticalPlacement flips above when cursor is near bottom", () => {
+  const res = popupVerticalPlacement({
+    itemCount: 10,
+    lineTop: 284,
+    lineHeight: 20,
+    scrollTop: 0,
+    viewportHeight: 320,
+    contentHeight: 600,
+  });
+  assert.equal(res.placeAbove, true);
+  assert.equal(res.bottom, 600 - 284);
+  assert.equal(res.top, undefined);
+  assert.equal(res.maxHeight, 264);
+});
+
+test("popupVerticalPlacement clamps maxHeight when viewport is short", () => {
+  const res = popupVerticalPlacement({
+    itemCount: 12,
+    lineTop: 140,
+    lineHeight: 20,
+    scrollTop: 0,
+    viewportHeight: 180,
+    contentHeight: 400,
+  });
+  assert.equal(res.placeAbove, true);
+  assert.equal(res.bottom, 400 - 140);
+  assert.equal(res.maxHeight, 136);
 });
