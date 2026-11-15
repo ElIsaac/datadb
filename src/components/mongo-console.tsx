@@ -10,8 +10,44 @@ import {
   type Candidato,
 } from "@/lib/mongo-completion";
 import { useAppDispatch } from "@/hooks/use-app-state";
+import { highlightMongoLines } from "@/lib/mongo-console-highlight";
 import type { SchemaNode, Session } from "@/lib/types";
 import type { MongoFindResult } from "@/shared/mongo-view";
+import "@/components/own-editor/own-editor.css";
+
+function HighlightedLines({ text }: { text: string }) {
+  const lines = React.useMemo(() => text.split("\n"), [text]);
+  const tokensByLine = React.useMemo(() => highlightMongoLines(lines), [lines]);
+
+  return (
+    <>
+      {lines.map((line, i) => {
+        const tokens = tokensByLine[i];
+        const parts: React.ReactNode[] = [];
+        let cursor = 0;
+
+        for (let j = 0; j < tokens.length; j++) {
+          const t = tokens[j];
+          if (t.from > cursor) parts.push(line.slice(cursor, t.from));
+          parts.push(
+            <span key={j} className={t.cls}>
+              {line.slice(t.from, t.to)}
+            </span>
+          );
+          cursor = t.to;
+        }
+        if (cursor < line.length) parts.push(line.slice(cursor));
+
+        return (
+          <React.Fragment key={i}>
+            {parts.length > 0 ? parts : line}
+            {i < lines.length - 1 ? "\n" : line === "" ? "\u200b" : null}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
 
 type ConsoleOutput =
   | { kind: "docs"; coleccion: string; res: MongoFindResult; ms: number }
@@ -257,6 +293,7 @@ function sugerenciasEn(
 export function MongoConsole({ session }: { session: Session }) {
   const dispatch = useAppDispatch();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const backdropRef = React.useRef<HTMLPreElement | null>(null);
   const [colecciones, setColecciones] = React.useState<string[]>([]);
   const [camposPorColeccion, setCamposPorColeccion] = React.useState<Record<string, string[]>>({});
   const [cargando, setCargando] = React.useState(true);
@@ -480,63 +517,78 @@ export function MongoConsole({ session }: { session: Session }) {
 
       {/* Editor MQL con autocompletado */}
       <div className="relative border-b border-gdb-sep bg-gdb-editor p-3">
-        <textarea
-          ref={textareaRef}
-          value={comando}
-          onChange={(e) => {
-            setComando(e.target.value);
-            setCursor(e.target.selectionStart ?? e.target.value.length);
-            setAcAbierto(true);
-            setAcIndice(0);
-          }}
-          onClick={(e) => {
-            setCursor(e.currentTarget.selectionStart ?? comando.length);
-          }}
-          onBlur={() => {
-            setTimeout(() => setAcAbierto(false), 120);
-          }}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              setAcAbierto(false);
-              void ejecutar();
-              return;
-            }
-            if (e.ctrlKey && e.code === "Space") {
-              e.preventDefault();
-              setCursor(e.currentTarget.selectionStart ?? comando.length);
+        <div className="relative overflow-hidden rounded border border-gdb-sep bg-gdb-field focus-within:border-gdb-accent">
+          <pre
+            ref={backdropRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-2.5 font-jetbrains text-xs leading-relaxed text-gdb-fgstrong"
+          >
+            <HighlightedLines text={comando} />
+          </pre>
+          <textarea
+            ref={textareaRef}
+            value={comando}
+            onScroll={(e) => {
+              if (backdropRef.current) {
+                backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+                backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
+              }
+            }}
+            onChange={(e) => {
+              setComando(e.target.value);
+              setCursor(e.target.selectionStart ?? e.target.value.length);
               setAcAbierto(true);
-              return;
-            }
-            if (sugerencias.length > 0 && acAbierto) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setAcIndice((i) => (i + 1) % sugerencias.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setAcIndice((i) => (i - 1 + sugerencias.length) % sugerencias.length);
-                return;
-              }
-              if (e.key === "Tab" || e.key === "Enter") {
-                e.preventDefault();
-                aceptarSugerencia(sugerencias[indiceActivo]);
-                return;
-              }
-              if (e.key === "Escape") {
+              setAcIndice(0);
+            }}
+            onClick={(e) => {
+              setCursor(e.currentTarget.selectionStart ?? comando.length);
+            }}
+            onBlur={() => {
+              setTimeout(() => setAcAbierto(false), 120);
+            }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
                 setAcAbierto(false);
+                void ejecutar();
                 return;
               }
-            }
-          }}
-          rows={4}
-          spellCheck={false}
-          aria-label="Consola de comandos MongoDB"
-          placeholder={`db.${primeraCol}.find({ "activo": true }).sort({ "_id": -1 }).limit(25)`}
-          className="w-full resize-y rounded border border-gdb-sep bg-gdb-field p-2.5 font-jetbrains text-xs leading-relaxed text-gdb-fgstrong outline-none focus:border-gdb-accent"
-        />
+              if (e.ctrlKey && e.code === "Space") {
+                e.preventDefault();
+                setCursor(e.currentTarget.selectionStart ?? comando.length);
+                setAcAbierto(true);
+                return;
+              }
+              if (sugerencias.length > 0 && acAbierto) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setAcIndice((i) => (i + 1) % sugerencias.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setAcIndice((i) => (i - 1 + sugerencias.length) % sugerencias.length);
+                  return;
+                }
+                if (e.key === "Tab" || e.key === "Enter") {
+                  e.preventDefault();
+                  aceptarSugerencia(sugerencias[indiceActivo]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setAcAbierto(false);
+                  return;
+                }
+              }
+            }}
+            rows={4}
+            spellCheck={false}
+            aria-label="Consola de comandos MongoDB"
+            placeholder={`db.${primeraCol}.find({ "activo": true }).sort({ "_id": -1 }).limit(25)`}
+            className="relative z-10 block w-full resize-y bg-transparent p-2.5 font-jetbrains text-xs leading-relaxed text-transparent caret-gdb-fgstrong outline-none placeholder:text-gdb-fgmuted selection:bg-gdb-accent/25"
+          />
+        </div>
         {acAbierto && sugerencias.length > 0 && (
           <div
             role="listbox"
@@ -677,7 +729,7 @@ export function MongoConsole({ session }: { session: Session }) {
                 </div>
               ) : (
                 <pre className="select-text whitespace-pre-wrap break-words font-jetbrains text-xs leading-relaxed text-gdb-fgstrong">
-                  {salidaJson}
+                  <HighlightedLines text={salidaJson} />
                 </pre>
               )}
             </div>
