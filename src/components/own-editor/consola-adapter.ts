@@ -107,8 +107,8 @@ function construir(fuente: FuenteDeTexto, obtenerElemento: () => HTMLElement | n
       // La consola solo despacha `changes` (formatear, insertar SQL de la IA) y `selection`.
       const cambios = tr.changes;
       if (cambios && typeof cambios === "object" && "from" in (cambios as Record<string, unknown>)) {
-        const c = cambios as { from: number; to: number; insert?: string };
-        fuente.aplicar(c.from, c.to, c.insert ?? "");
+        const c = cambios as { from: number; to?: number; insert?: string };
+        fuente.aplicar(c.from, c.to ?? c.from, c.insert ?? "");
         return;
       }
       const sel = tr.selection;

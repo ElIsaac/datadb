@@ -15,7 +15,7 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { useAppDispatch, useActiveSession } from "@/hooks/use-app-state";
 import { askAi, makeUserChatMessage, makeAssistantChatMessage } from "@/lib/ai";
 import type { QueryResult, TableContext } from "@/lib/types";
-import { AlertTriangleIcon, SparklesIcon } from "lucide-react";
+import { AlertTriangleIcon, CopyIcon, FileInputIcon, SparklesIcon } from "lucide-react";
 
 const ROW_LIMIT = 20;
 
@@ -217,6 +217,38 @@ export function AiDataDialog({ open, onOpenChange, result, tableContext }: AiDat
         )}
 
         <DialogFooter>
+          {response?.sql && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!response.sql) return;
+                  await navigator.clipboard.writeText(response.sql);
+                  toast.success("SQL copiado");
+                }}
+              >
+                <CopyIcon className="size-3.5" />
+                Copiar SQL
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const sql = response.sql;
+                  if (!sql) return;
+                  dispatch({ type: "SET_ACTIVE_TAB", payload: "sql" });
+                  setTimeout(
+                    () => window.dispatchEvent(new CustomEvent("gestordb:ai-insert-sql", { detail: sql })),
+                    80
+                  );
+                  onOpenChange(false);
+                }}
+              >
+                <FileInputIcon className="size-3.5" />
+                Insertar en consola
+              </Button>
+            </>
+          )}
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>

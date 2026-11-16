@@ -1,11 +1,19 @@
 import type { AiRequest } from "@/lib/ai-types";
 
-type SqlDialect = "postgres" | "mysql" | "sqlserver";
+export type SqlDialect = "postgres" | "mysql" | "sqlserver";
+export type AiDialect = SqlDialect | "mongodb";
+
+const DIALECT_LABEL: Record<AiDialect, string> = {
+  postgres: "PostgreSQL",
+  mysql: "MySQL",
+  sqlserver: "SQL Server (Transact-SQL / T-SQL)",
+  mongodb: "MongoDB (MQL / Aggregation Pipeline)",
+};
 
 export function buildMessages(
   req: AiRequest,
   schemaContext: string,
-  dialect: SqlDialect,
+  dialect: AiDialect,
   readOnly = false
 ): { role: string; content: string }[] {
   const messages: { role: string; content: string }[] = [
@@ -24,22 +32,33 @@ export function buildMessages(
 }
 
 function buildSystemPrompt(
-  dialect: SqlDialect,
+  dialect: AiDialect,
   readOnly: boolean,
   task: AiRequest["task"]
 ): string {
+  const isMongo = dialect === "mongodb";
   const lines = [
-    "Eres un asistente experto en SQL embebido en DataDB, un cliente de bases de datos.",
-    `El dialecto SQL activo es **${dialect}**${dialect === "sqlserver" ? " (Transact-SQL / T-SQL)" : ""}.`,
+    isMongo
+      ? "Eres un asistente experto en MongoDB embebido en DataDB, un cliente de bases de datos."
+      : "Eres un asistente experto en SQL embebido en DataDB, un cliente de bases de datos.",
+    isMongo
+      ? `El motor activo es **${DIALECT_LABEL[dialect]}**.`
+      : `El dialecto SQL activo es **${DIALECT_LABEL[dialect]}**.`,
     "Tienes a continuación un contexto de esquema. Úsalo **exclusivamente**: si algo no está en el esquema, dilo explícitamente en vez de inventarlo.",
     "Responde en el **mismo idioma** en el que te escriba el usuario.",
-    "Cuando produzcas código SQL, envuélvelo en un único bloque ```sql. No pongas explicaciones dentro del bloque.",
-    "No sugieras DROP, TRUNCATE ni DELETE sin WHERE salvo que el usuario lo pida de forma inequívoca; si lo hace, advierte del riesgo.",
+    isMongo
+      ? "La base de datos activa es MongoDB (NO SQL). Responde con consultas de MongoDB (`db.collection.find(...)`, `db.collection.aggregate([...])`) dentro de bloques ```javascript o ```json en lugar de SQL."
+      : "Cuando produzcas código SQL, envuélvelo en un único bloque ```sql. No pongas explicaciones dentro del bloque.",
+    isMongo
+      ? "No sugieras operaciones destructivas (`drop`, `dropDatabase`, `deleteMany({})`) salvo que el usuario lo pida de forma inequívoca; si lo hace, advierte del riesgo."
+      : "No sugieras DROP, TRUNCATE ni DELETE sin WHERE salvo que el usuario lo pida de forma inequívoca; si lo hace, advierte del riesgo.",
     readOnly
-      ? "Esta conexión es de **solo lectura** (read-only), así que no generes INSERT, UPDATE, DELETE ni DDL."
+      ? isMongo
+        ? "Esta conexión es de **solo lectura** (read-only), así que no generes operaciones de escritura (`insertOne`, `insertMany`, `updateOne`, `updateMany`, `deleteOne`, `deleteMany`, `drop`)."
+        : "Esta conexión es de **solo lectura** (read-only), así que no generes INSERT, UPDATE, DELETE ni DDL."
       : "",
     task === "chat"
-      ? "En el chat, da respuestas completas y bien desarrolladas: explica el razonamiento, cubre casos relevantes (índices, JOINs alternativos, edge cases) y usa Markdown (listas, tablas, negritas) cuando ayude a la claridad. No seas telegráfico ni recortes la explicación por brevedad."
+      ? "En el chat, da respuestas completas y bien desarrolladas: explica el razonamiento, cubre casos relevantes (índices, alternativas, edge cases) y usa Markdown (listas, tablas, negritas) cuando ayude a la claridad. No seas telegráfico ni recortes la explicación por brevedad."
       : "",
   ];
   return lines.filter(Boolean).join("\n");
@@ -47,16 +66,19 @@ function buildSystemPrompt(
 
 function userPromptForTask(
   req: AiRequest,
-  dialect: SqlDialect
+  dialect: AiDialect
 ): string {
   switch (req.task) {
     case "chat":
+      if (req.sql?.trim()) {
+        return `Active SQL in editor:\n\`\`\`sql\n${req.sql.trim()}\n\`\`\`\n\nUser request:\n${req.prompt ?? ""}`;
+      }
       return req.prompt ?? "";
     case "text-to-sql":
       return [
         "Genera una consulta SQL para el siguiente pedido:",
         req.prompt ?? "",
-        `Dialecto: ${dialect}. Devuelve **solo** el bloque SQL, sin prosa previa.`,
+        `Dialecto: ${DIALECT_LABEL[dialect]}. Devuelve **solo** el bloque SQL, sin prosa previa.`,
       ].join("\n");
     case "explain-sql":
       return [
@@ -67,7 +89,7 @@ function userPromptForTask(
       ].join("\n");
     case "convert-sql":
       return [
-        `Convierte esta consulta de ${dialect} a ${req.targetDialect ?? (dialect === "postgres" ? "mysql" : "postgres")}.`,
+        `Convierte esta consulta de ${DIALECT_LABEL[dialect]} a ${DIALECT_LABEL[req.targetDialect ?? (dialect === "postgres" ? "mysql" : "postgres")]}.`,
         "```sql",
         req.sql ?? "",
         "```",
@@ -113,7 +135,7 @@ function userPromptForTask(
           ? `Columnas disponibles en el result set actual: ${req.columns.join(", ")}.`
           : "",
         `Petición: ${req.prompt ?? ""}`,
-        `Dialecto: ${dialect}. Devuelve el SQL en un bloque \`\`\`sql. Si conviene, añade una nota breve fuera del bloque.`,
+        `Dialecto: ${DIALECT_LABEL[dialect]}. Devuelve el SQL en un bloque \`\`\`sql. Si conviene, añade una nota breve fuera del bloque.`,
       ]
         .filter(Boolean)
         .join("\n");

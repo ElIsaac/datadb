@@ -1,9 +1,10 @@
 import type { SchemaNode, TableMeta, ColumnMeta } from "@/lib/types";
+import type { AiDialect } from "./prompts";
 
 export interface SchemaContextOptions {
   budgetChars: number;
   focusTables?: { schema?: string; table: string }[];
-  dialect: "postgres" | "mysql" | "sqlserver";
+  dialect: AiDialect;
 }
 
 function tableKey(schema: string, table: string): string {

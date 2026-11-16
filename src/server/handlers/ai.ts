@@ -52,12 +52,13 @@ async function prepare(body: AiRequest) {
 
   const settings = await loadAiSettings();
   const schema = await getSessionSchema(body.sessionId);
+  const aiDialect = stored.session.type === "mongodb" ? "mongodb" : dialectoSql(stored.session.type);
   const schemaContext = buildSchemaContext(schema, {
     budgetChars: settings.schemaBudgetChars,
     focusTables: body.focusTables ?? [],
-    dialect: dialectoSql(stored.session.type),
+    dialect: aiDialect,
   });
-  const messages = buildMessages(body, schemaContext, dialectoSql(stored.session.type), stored.session.readOnly);
+  const messages = buildMessages(body, schemaContext, aiDialect, stored.session.readOnly);
   // Fase 25 (R24): proveedor activo y SU modelo.
   return { settings, messages, provider: getProvider(settings), model: activeModelOf(settings).model };
 }

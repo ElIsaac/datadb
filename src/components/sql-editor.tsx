@@ -25,6 +25,7 @@ import { IjIcon } from "@/components/ij-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { connectionOf } from "@/lib/console-binding";
+import { dialectoSql } from "@/shared/connection-net";
 
 const RUN_QUERY_EVENT = "cm-run-query";
 const OPEN_ER_DIAGRAM_EVENT = "cm-open-er-diagram";
@@ -733,8 +734,9 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
   const handleInsertAiSql = React.useCallback((sql: string) => {
     const view = cmRef.current?.view;
     if (!view) return;
+    const { from, to } = view.state.selection.main;
     view.dispatch({
-      changes: { from: view.state.selection.main.head, insert: sql },
+      changes: { from, to, insert: sql },
     });
     view.focus();
   }, []);
@@ -746,7 +748,14 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
     const selection = view.state.selection.main;
     const pos = selection.head;
     const active = getActiveStatementBounds(fullText, pos);
-    if (!active) return;
+    if (!active || active.from === active.to) {
+      const { from, to } = selection;
+      view.dispatch({
+        changes: { from, to, insert: sql },
+      });
+      view.focus();
+      return;
+    }
     view.dispatch({
       changes: { from: active.from, to: active.to, insert: sql },
     });
@@ -776,6 +785,24 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
       if (typeof sql === "string" && sql.trim()) {
         handleInsertAiSql(sql);
       }
+    }
+    function onReplaceSql(e: Event) {
+      const detail = (e as CustomEvent<string>).detail;
+      if (typeof detail === "string" && detail.trim()) {
+        handleReplaceAiSql(detail);
+      }
+    }
+    function onOpenConvert(e: Event) {
+      const sql = getEditorActiveStatement() ?? "";
+      if (!sql.trim()) {
+        toast.info("No hay un statement activo para convertir");
+        return;
+      }
+      const customTarget = (e as CustomEvent<"postgres" | "mysql" | "sqlserver" | undefined>).detail;
+      const currentDialect = dialectoSql(session?.type);
+      const defaultTarget = currentDialect === "postgres" ? "mysql" : "postgres";
+      const target = customTarget && customTarget !== currentDialect ? customTarget : defaultTarget;
+      setConvertTarget({ target, sql });
     }
     async function onExplainActive() {
       const stmt = getEditorActiveStatement() ?? "";
@@ -844,7 +871,9 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
     window.addEventListener("gestordb:ai-sql", onOpenAiSql);
     window.addEventListener("gestordb:ai-settings", onOpenAiSettings);
     window.addEventListener("gestordb:ai-explain", onExplain);
+    window.addEventListener("gestordb:ai-convert", onOpenConvert);
     window.addEventListener("gestordb:ai-insert-sql", onInsertSql);
+    window.addEventListener("gestordb:ai-replace-sql", onReplaceSql);
     window.addEventListener("gestordb:execute", onMenuExecute);
     window.addEventListener("gestordb:execute-all", onMenuExecuteAll);
     window.addEventListener("gestordb:cancel-query", onMenuCancel);
@@ -856,7 +885,9 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
       window.removeEventListener("gestordb:ai-sql", onOpenAiSql);
       window.removeEventListener("gestordb:ai-settings", onOpenAiSettings);
       window.removeEventListener("gestordb:ai-explain", onExplain);
+      window.removeEventListener("gestordb:ai-convert", onOpenConvert);
       window.removeEventListener("gestordb:ai-insert-sql", onInsertSql);
+      window.removeEventListener("gestordb:ai-replace-sql", onReplaceSql);
       window.removeEventListener("gestordb:execute", onMenuExecute);
       window.removeEventListener("gestordb:execute-all", onMenuExecuteAll);
       window.removeEventListener("gestordb:cancel-query", onMenuCancel);
@@ -867,6 +898,7 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
   }, [
     handleOpenAiSql,
     handleInsertAiSql,
+    handleReplaceAiSql,
     session,
     dispatch,
     handleRun,
@@ -1209,6 +1241,7 @@ export function SqlEditor({ txMode = "auto" }: { txMode?: "auto" | "manual" }) {
           }}
           sql={convertTarget.sql}
           targetDialect={convertTarget.target}
+          onInsert={handleInsertAiSql}
           onReplace={handleReplaceAiSql}
         />
       )}

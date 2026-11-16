@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/command";
 import { useAppState, useAppDispatch } from "@/hooks/use-app-state";
 import { showToolWindow } from "@/shell/layout-store";
-import { TerminalIcon, UnplugIcon, TableIcon, HistoryIcon, SparklesIcon, MessageSquareIcon, SettingsIcon, FileQuestionIcon, CodeIcon } from "lucide-react";
+import { TerminalIcon, UnplugIcon, TableIcon, HistoryIcon, SparklesIcon, MessageSquareIcon, SettingsIcon, FileQuestionIcon, CodeIcon, Wand2Icon, LanguagesIcon } from "lucide-react";
 
 interface CommandPaletteProps {
   onDisconnect: () => void;
@@ -168,6 +168,20 @@ export function CommandPalette({ onDisconnect }: CommandPaletteProps) {
           >
             <FileQuestionIcon className="size-4 shrink-0" />
             <span className="flex-1 text-sm">IA: Explicar statement activo</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => dispatchAiEvent("gestordb:ai-lint-fix")}
+            className="gap-3 rounded-lg px-3 py-2.5 data-selected:bg-primary/15 data-selected:text-primary"
+          >
+            <Wand2Icon className="size-4 shrink-0" />
+            <span className="flex-1 text-sm">IA: Corregir statement activo (linter)</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => dispatchAiEvent("gestordb:ai-convert")}
+            className="gap-3 rounded-lg px-3 py-2.5 data-selected:bg-primary/15 data-selected:text-primary"
+          >
+            <LanguagesIcon className="size-4 shrink-0" />
+            <span className="flex-1 text-sm">IA: Convertir SQL a otro dialecto…</span>
           </CommandItem>
           <CommandItem
             onSelect={openAiChat}

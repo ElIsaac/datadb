@@ -1,5 +1,7 @@
 import * as React from "react";
-import { dialectoSql } from "@/shared/connection-net";
+import { dialectoSql, esMotorSql } from "@/shared/connection-net";
+import { detectSqlRisk } from "@/lib/sql-safety";
+import { isReadOnlyStatement } from "@/server/db/read-only-guard";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,6 +35,9 @@ import {
   CheckIcon,
   XIcon,
   SettingsIcon,
+  AlertTriangleIcon,
+  FileDiffIcon,
+  Wand2Icon,
 } from "lucide-react";
 
 type SqlDialectType = "postgres" | "mysql" | "sqlserver";
@@ -43,10 +48,48 @@ function dialectLabel(type: SqlDialectType | undefined): string {
   return "MySQL";
 }
 
-/** Dialecto por defecto sugerido para el atajo rápido "Convertir" del chat
- * (sin selector propio, a diferencia del menú "Convertir a →" del editor). */
-function defaultConvertTarget(type: SqlDialectType | undefined): SqlDialectType {
-  return type === "mysql" ? "postgres" : "mysql";
+type DiffLine = { type: "same" | "remove" | "add"; text: string };
+
+/** Calcula un diff línea a línea (LCS) entre el SQL actual del editor y la propuesta de la IA. */
+function computeLineDiff(beforeText: string, afterText: string): DiffLine[] {
+  const a = beforeText.split("\n");
+  const b = afterText.split("\n");
+  const m = a.length;
+  const n = b.length;
+
+  if (m * n > 40_000) {
+    return [
+      ...a.map((text): DiffLine => ({ type: "remove", text })),
+      ...b.map((text): DiffLine => ({ type: "add", text })),
+    ];
+  }
+
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? 1 + dp[i + 1][j + 1] : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) {
+      out.push({ type: "same", text: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ type: "remove", text: a[i] });
+      i++;
+    } else {
+      out.push({ type: "add", text: b[j] });
+      j++;
+    }
+  }
+  while (i < m) out.push({ type: "remove", text: a[i++] });
+  while (j < n) out.push({ type: "add", text: b[j++] });
+  return out;
 }
 
 /** Divide un mensaje en segmentos de texto/Markdown y bloques ```sql (estos se
@@ -74,24 +117,102 @@ function insertSqlInConsole(sql: string) {
   window.dispatchEvent(new CustomEvent("gestordb:ai-insert-sql", { detail: sql }));
 }
 
-function SqlBlock({ sql, onInsert }: { sql: string; onInsert: (sql: string) => void }) {
+function replaceSqlInConsole(sql: string) {
+  window.dispatchEvent(new CustomEvent("gestordb:ai-replace-sql", { detail: sql }));
+}
+
+interface SqlBlockProps {
+  sql: string;
+  activeSql?: string;
+  readOnly?: boolean;
+  canInsertInConsole?: boolean;
+  sessionType?: string;
+  onInsert: (sql: string) => void;
+  onReplace?: (sql: string) => void;
+}
+
+function SqlBlock({
+  sql,
+  activeSql,
+  readOnly,
+  canInsertInConsole,
+  sessionType,
+  onInsert,
+  onReplace,
+}: SqlBlockProps) {
   const [copied, setCopied] = React.useState(false);
+  const [showDiff, setShowDiff] = React.useState(false);
+  const risk = React.useMemo(() => detectSqlRisk(sql), [sql]);
+  const readOnlyBlock = readOnly ? !isReadOnlyStatement(sql, sessionType) : false;
+  const hasDiff = Boolean(activeSql?.trim() && activeSql.trim() !== sql.trim());
+  const diffLines = React.useMemo(
+    () => (showDiff && hasDiff && activeSql ? computeLineDiff(activeSql.trim(), sql.trim()) : null),
+    [showDiff, hasDiff, activeSql, sql]
+  );
+
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-gdb-editor">
-      <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3 py-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          SQL
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onInsert(sql)}
-            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="Insertar este SQL en la consola, en la posición del cursor"
-          >
-            <FileInputIcon className="size-3" />
-            Insertar en consola
-          </button>
+      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-border/60 bg-muted/30 px-3 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            SQL
+          </span>
+          {risk && (
+            <span
+              className="inline-flex items-center gap-1 rounded border border-gdb-warn/30 bg-gdb-warn/10 px-1.5 py-px text-[10px] font-medium text-gdb-warnfg"
+              title={risk.message}
+            >
+              <AlertTriangleIcon className="size-2.5" />
+              Riesgo
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {hasDiff && (
+            <button
+              type="button"
+              onClick={() => setShowDiff((v) => !v)}
+              className={cn(
+                "flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
+                showDiff
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              )}
+              title="Comparar con el SQL activo del editor"
+            >
+              <FileDiffIcon className="size-3" />
+              Diff
+            </button>
+          )}
+          {canInsertInConsole && (
+            <>
+              <button
+                type="button"
+                onClick={() => onInsert(sql)}
+                className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                title="Insertar este SQL en la consola, en la posición del cursor"
+              >
+                <FileInputIcon className="size-3" />
+                Insertar
+              </button>
+              {onReplace && (
+                <button
+                  type="button"
+                  onClick={() => onReplace(sql)}
+                  disabled={readOnlyBlock}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+                  title={
+                    readOnlyBlock
+                      ? "Conexión en modo solo lectura: no se puede reemplazar con una sentencia de escritura"
+                      : "Reemplazar el statement activo en la consola"
+                  }
+                >
+                  <Wand2Icon className="size-3" />
+                  Reemplazar
+                </button>
+              )}
+            </>
+          )}
           <button
             type="button"
             onClick={async () => {
@@ -107,9 +228,30 @@ function SqlBlock({ sql, onInsert }: { sql: string; onInsert: (sql: string) => v
           </button>
         </div>
       </div>
-      <div className="max-h-64 overflow-auto">
-        <CodePreview value={sql} language="sql" className="h-full" fontSize="13px" />
-      </div>
+      {showDiff && diffLines ? (
+        <div className="max-h-64 overflow-auto py-1 font-jetbrains text-[12px] leading-5">
+          {diffLines.map((line, idx) => (
+            <div
+              key={idx}
+              className={cn(
+                "flex gap-2 whitespace-pre px-3",
+                line.type === "remove" && "bg-gdb-dangerbg text-gdb-dangerfg",
+                line.type === "add" && "bg-gdb-okbg text-gdb-okfg",
+                line.type === "same" && "text-muted-foreground"
+              )}
+            >
+              <span className="w-3 shrink-0 select-none opacity-70">
+                {line.type === "remove" ? "-" : line.type === "add" ? "+" : " "}
+              </span>
+              <span>{line.text || " "}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="max-h-64 overflow-auto">
+          <CodePreview value={sql} language="sql" className="h-full" fontSize="13px" />
+        </div>
+      )}
     </div>
   );
 }
@@ -159,6 +301,7 @@ export function AiChatPanel() {
 
   // El chat IA opera sobre la conexión de la consola con foco (multi-conexión).
   const session = console_.session;
+  const isSqlSession = esMotorSql(session?.type);
   const settings = state.aiSettings;
 
   const activeStatement = React.useMemo(() => {
@@ -286,6 +429,7 @@ export function AiChatPanel() {
           sessionId: session.sessionId,
           task: "chat",
           prompt,
+          sql: isSqlSession && useFocusTables && activeStatement.trim() ? activeStatement : undefined,
           focusTables,
           history: [...state.aiMessages, userMsg].reverse(),
         },
@@ -337,7 +481,11 @@ export function AiChatPanel() {
     }
   }
 
-  async function runTask(task: "explain-sql" | "convert-sql" | "optimize-sql", label: string) {
+  async function runTask(
+    task: "explain-sql" | "convert-sql" | "optimize-sql",
+    label: string,
+    targetDialect?: SqlDialectType
+  ) {
     if (!activeStatement || !session) {
       if (!activeStatement) toast.info(`No hay un statement activo para ${label.toLowerCase()}`);
       return;
@@ -355,7 +503,7 @@ export function AiChatPanel() {
         task,
         sql: activeStatement,
         explainPlan,
-        targetDialect: task === "convert-sql" ? defaultConvertTarget(dialectoSql(session.type)) : undefined,
+        targetDialect: task === "convert-sql" ? targetDialect : undefined,
         focusTables,
       });
       dispatch({
@@ -382,6 +530,17 @@ export function AiChatPanel() {
           <span title="Tablas del esquema incluidas como contexto">
             Esquema: {schemaTableCount} tablas
           </span>
+          {isSqlSession && useFocusTables && activeStatement.trim() && (
+            <>
+              <span className="text-border">·</span>
+              <span
+                className="inline-flex items-center rounded border border-primary/30 bg-primary/10 px-1.5 py-px font-jetbrains text-[10px] text-primary"
+                title={`SQL activo adjuntado:\n${activeStatement}`}
+              >
+                SQL activo
+              </span>
+            </>
+          )}
           {focusTables.length > 0 && (
             <>
               <span className="text-border">·</span>
@@ -462,10 +621,19 @@ export function AiChatPanel() {
                         <SqlBlock
                           key={j}
                           sql={seg.value}
+                          activeSql={activeStatement}
+                          readOnly={session?.readOnly}
+                          canInsertInConsole={isSqlSession}
+                          sessionType={session?.type}
                           onInsert={(sql) => {
                             dispatch({ type: "SET_ACTIVE_TAB", payload: "sql" });
                             // Esperar a que SqlEditor se monte si la pestaña activa no era SQL.
                             setTimeout(() => insertSqlInConsole(sql), 80);
+                          }}
+                          onReplace={(sql) => {
+                            dispatch({ type: "SET_ACTIVE_TAB", payload: "sql" });
+                            // Esperar a que SqlEditor se monte si la pestaña activa no era SQL.
+                            setTimeout(() => replaceSqlInConsole(sql), 80);
                           }}
                         />
                       ) : seg.value.trim() ? (
@@ -526,33 +694,48 @@ export function AiChatPanel() {
       )}
 
       {/* Acciones rápidas */}
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 px-3 pt-2 pb-1.5">
-        {(["Explicar", "Convertir", "Optimizar"] as const).map((label) => (
+      {isSqlSession && activeStatement.trim() && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 px-3 pt-2 pb-1.5">
           <button
-            key={label}
             type="button"
             disabled={busy}
-            onClick={() =>
-              void runTask(
-                label === "Explicar"
-                  ? "explain-sql"
-                  : label === "Convertir"
-                    ? "convert-sql"
-                    : "optimize-sql",
-                label === "Explicar"
-                  ? "Explica esta consulta"
-                  : label === "Convertir"
-                    ? `Convierte esta consulta a ${dialectLabel(defaultConvertTarget(dialectoSql(session?.type)))}`
-                    : "Optimiza esta consulta"
-              )
-            }
+            onClick={() => void runTask("explain-sql", "Explica esta consulta")}
             className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
           >
             <SparklesIcon className="size-3" />
-            {label}
+            Explicar
           </button>
-        ))}
-      </div>
+          {(["postgres", "mysql", "sqlserver"] as const)
+            .filter((d) => d !== dialectoSql(session?.type))
+            .map((targetDialect) => (
+              <button
+                key={targetDialect}
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void runTask(
+                    "convert-sql",
+                    `Convierte esta consulta a ${dialectLabel(targetDialect)}`,
+                    targetDialect
+                  )
+                }
+                className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              >
+                <SparklesIcon className="size-3" />
+                → {dialectLabel(targetDialect)}
+              </button>
+            ))}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runTask("optimize-sql", "Optimiza esta consulta")}
+            className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <SparklesIcon className="size-3" />
+            Optimizar
+          </button>
+        </div>
+      )}
 
       {/* Composer */}
       <div className="border-t p-3">

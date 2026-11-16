@@ -28,32 +28,43 @@ export interface AiConvertDialogProps {
   sql: string;
   /** Dialecto destino. */
   targetDialect: "postgres" | "mysql" | "sqlserver";
+  onInsert?: (sql: string) => void;
   onReplace: (sql: string) => void;
 }
 
 /**
- * Convierte el statement activo a otro dialecto (Postgres ↔ MySQL) usando IA.
- * Muestra el resultado en preview; nunca ejecuta — solo reemplaza en el editor.
+ * Convierte el statement activo a otro dialecto (Postgres / MySQL / SQL Server) usando IA.
+ * Muestra el resultado en preview; nunca ejecuta — solo inserta o reemplaza en el editor.
  */
 export function AiConvertDialog({
   open,
   onOpenChange,
   sql,
   targetDialect,
+  onInsert,
   onReplace,
 }: AiConvertDialogProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
   // Las acciones de IA operan sobre la conexión de la consola con foco.
   const session = useActiveSession();
+  const [selectedTarget, setSelectedTarget] = React.useState<"postgres" | "mysql" | "sqlserver">(
+    targetDialect
+  );
   const [busy, setBusy] = React.useState(false);
   const [response, setResponse] = React.useState<AiResponse | null>(null);
   const [copied, setCopied] = React.useState(false);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   React.useEffect(() => {
+    setSelectedTarget(targetDialect);
+  }, [open, targetDialect]);
+
+  React.useEffect(() => {
     if (!open) {
       setResponse(null);
+      setBusy(false);
+      dispatch({ type: "SET_AI_BUSY", payload: false });
       return;
     }
     if (!session) return;
@@ -61,27 +72,35 @@ export function AiConvertDialog({
       toast.error(MISSING_KEY_MESSAGE);
       return;
     }
+    let cancelled = false;
     setBusy(true);
+    setResponse(null);
     dispatch({ type: "SET_AI_BUSY", payload: true });
     askAi({
       sessionId: session.sessionId,
       task: "convert-sql",
       sql,
-      targetDialect,
+      targetDialect: selectedTarget,
       focusTables: extractScopeTables(sql),
     })
       .then((res) => {
+        if (cancelled) return;
         setResponse(res);
         if (res.usage) dispatch({ type: "SET_AI_LAST_USAGE", payload: res.usage });
       })
       .catch((err) => {
+        if (cancelled) return;
         toast.error(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
+        if (cancelled) return;
         setBusy(false);
         dispatch({ type: "SET_AI_BUSY", payload: false });
       });
-  }, [open, sql, targetDialect, session, state.aiSettings?.hasApiKey, dispatch]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sql, selectedTarget, session, state.aiSettings?.hasApiKey, dispatch]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const convertedSql = response?.sql ?? "";
@@ -101,8 +120,12 @@ export function AiConvertDialog({
     if (type === "sqlserver") return "SQL Server";
     return "MySQL";
   }
-  const targetLabel = dialectLabel(targetDialect);
-  const sourceLabel = dialectLabel(dialectoSql(session?.type));
+  const sourceDialect = dialectoSql(session?.type);
+  const availableTargets = (["postgres", "mysql", "sqlserver"] as const).filter(
+    (d) => d !== sourceDialect
+  );
+  const targetLabel = dialectLabel(selectedTarget);
+  const sourceLabel = dialectLabel(sourceDialect);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,6 +141,21 @@ export function AiConvertDialog({
         </DialogHeader>
 
         <div className="grid gap-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Dialecto destino:</span>
+            {availableTargets.map((d) => (
+              <Button
+                key={d}
+                type="button"
+                size="xs"
+                variant={selectedTarget === d ? "default" : "outline"}
+                onClick={() => setSelectedTarget(d)}
+              >
+                {dialectLabel(d)}
+              </Button>
+            ))}
+          </div>
+
           <div className="grid gap-1">
             <span className="text-xs font-medium text-muted-foreground">Original ({sourceLabel})</span>
             <div className="h-28 overflow-hidden rounded border">
@@ -180,6 +218,18 @@ export function AiConvertDialog({
                 {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
                 Copiar
               </Button>
+              {onInsert && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onInsert(convertedSql);
+                    onOpenChange(false);
+                  }}
+                >
+                  Insertar en cursor
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() => {
