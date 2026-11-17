@@ -1,3 +1,4 @@
+import { sslParaDriver } from "@/server/net/tls-sql";
 import { Pool, types as pgTypes, type PoolClient, type QueryResult as PgQueryResult } from "pg";
 import type {
   ColumnMeta,
@@ -67,6 +68,7 @@ export class PostgresDriver implements DatabaseDriver {
       user: config.user,
       password: config.password,
       database: config.database,
+      ssl: sslParaDriver(config.tls),
       max: 5,
       connectionTimeoutMillis: 8000,
       // R53: en perfiles de solo lectura la propia base rechaza escrituras (ver read-only-session.ts).

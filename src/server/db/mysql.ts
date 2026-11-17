@@ -1,3 +1,4 @@
+import { sslParaDriver } from "@/server/net/tls-sql";
 import mysql, {
   type FieldPacket,
   type Pool,
@@ -36,6 +37,7 @@ export class MysqlDriver implements DatabaseDriver {
       user: config.user,
       password: config.password,
       database: config.database,
+      ssl: sslParaDriver(config.tls),
       connectionLimit: 5,
       connectTimeout: 8000,
       // DATE, DATETIME y TIMESTAMP llegan como TEXTO, tal cual los tiene el servidor, en vez de
