@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { normalizarTls, problemasDeRed, type TlsConfig } from "@/shared/connection-net";
+import { normalizarAuth, normalizarTls, problemasDeRed, type AuthConfig, type TlsConfig } from "@/shared/connection-net";
 
 export interface OpcionesSsl {
   rejectUnauthorized: boolean;
@@ -10,11 +10,11 @@ export interface OpcionesSsl {
 }
 
 /** `ssl` para `pg` y `mysql2` (ambos lo pasan tal cual a `tls.connect`); `undefined` = sin TLS. */
-export function sslParaDriver(entrada: TlsConfig | undefined): OpcionesSsl | undefined {
+export function sslParaDriver(entrada: TlsConfig | undefined, auth?: AuthConfig): OpcionesSsl | undefined {
   const tls = normalizarTls(entrada);
-  if (tls.mode === "deshabilitado") return undefined;
-  const problemas = problemasDeRed(tls, undefined);
+  const problemas = problemasDeRed(tls, undefined, normalizarAuth(auth));
   if (problemas.length) throw new Error(problemas.join("; "));
+  if (tls.mode === "deshabilitado") return undefined;
   return {
     rejectUnauthorized: tls.mode !== "requerido",
     ...(tls.caFile ? { ca: readFileSync(tls.caFile) } : {}),

@@ -28,3 +28,7 @@ test("verificar-ca valida contra la CA y respeta serverName", () => {
 test("verificar-ca sin CA falla con un mensaje del formulario", () => {
   assert.throws(() => sslParaDriver({ mode: "verificar-ca" }), /falta el archivo de CA/);
 });
+
+test("IAM con TLS deshabilitado falla en vez de conectar sin cifrar", () => {
+  assert.throws(() => sslParaDriver(undefined, { mode: "iam", region: "us-east-2" }), /IAM: requiere TLS/);
+});
